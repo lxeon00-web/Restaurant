@@ -349,22 +349,22 @@ input[type="date"].form-input { min-width: 150px; flex: 0 0 auto; }
       <button class="btn btn-outline btn-sm" id="btn-github-logout" onclick="supabaseLogout()" style="display:none;">退出登录</button>
     </div>
     <div id="supabase-config-section" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">首次使用需配置 Supabase 连接信息（在 Supabase 控制台 → Settings → API 中复制）：</p>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">在 Supabase 控制台 → Settings → API 中复制以下信息（Project URL 只需根域名，不要带 /rest/v1/）：</p>
       <div class="form-row">
-        <label class="form-label" style="font-size:12px;">Supabase URL</label>
+        <label class="form-label" style="font-size:12px;">Project URL</label>
         <input type="text" class="form-input" id="supabase-url" placeholder="https://xxxxx.supabase.co" style="font-size:13px;">
       </div>
       <div class="form-row">
         <label class="form-label" style="font-size:12px;">Anon Key</label>
         <input type="text" class="form-input" id="supabase-anon-key" placeholder="eyJhbGci..." style="font-size:13px;">
       </div>
+      <div class="form-row" style="margin-top:4px;">
+        <label class="form-label" style="font-size:12px;">页面地址</label>
+        <input type="text" class="form-input" id="supabase-app-url" placeholder="部署后的网页链接，如 https://xxx.github.io/restaurant-app/" style="font-size:13px;">
+      </div>
+      <p style="font-size:10px;color:var(--text-secondary);margin-top:6px;">页面地址是你的 index.html 被访问的网址。如果是通过网址打开的（非本地文件），可留空自动获取。需将此地址添加到 Supabase → Authentication → URL Configuration → Redirect URLs 中。</p>
       <button class="btn btn-outline btn-sm" onclick="saveSupabaseConfig()" style="margin-top:8px;">💾 保存配置</button>
       <span id="supabase-config-status" style="font-size:12px;margin-left:8px;"></span>
-      <div class="form-row" style="margin-top:8px;">
-        <label class="form-label" style="font-size:12px;">应用网址</label>
-        <input type="text" class="form-input" id="supabase-app-url" placeholder="https://xxx.github.io/restaurant-app/" style="font-size:13px;">
-        <span style="font-size:11px;color:var(--text-secondary);">OAuth 回调地址（需与 Supabase 中配置一致）</span>
-      </div>
     </div>
     <div id="supabase-sync-indicator" style="margin-top:8px;font-size:12px;color:var(--text-secondary);"></div>
   </div>
@@ -455,19 +455,38 @@ let supabase = null;
 let supabaseAuthed = false;
 let supabaseReady = false;
 
+function sanitizeSupabaseUrl(raw) {
+  // Strip /rest/v1/, /auth/v1/, trailing slashes, etc. — keep only the base origin
+  var cleaned = raw.trim().replace(/\/+$/, '');
+  // Remove any path after .co (like /rest/v1/callback)
+  var match = cleaned.match(/^(https?:\/\/[^\/]+\.supabase\.co)/);
+  if (match) { cleaned = match[1]; }
+  return cleaned;
+}
+
 function getSupabaseConfig() {
   try { return JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || {}; }
   catch { return {}; }
 }
 
 function saveSupabaseConfig() {
-  const url = document.getElementById('supabase-url').value.trim();
-  const key = document.getElementById('supabase-anon-key').value.trim();
-  const appUrl = document.getElementById('supabase-app-url').value.trim();
-  if (!url || !key) { toast('请填写 URL 和 Anon Key'); return; }
-  const config = { url, anonKey: key, appUrl: appUrl };
+  var rawUrl = document.getElementById('supabase-url').value.trim();
+  var url = sanitizeSupabaseUrl(rawUrl);
+  var key = document.getElementById('supabase-anon-key').value.trim();
+  var appUrl = document.getElementById('supabase-app-url').value.trim();
+
+  if (!url || !key) { toast('请填写 Project URL 和 Anon Key'); return; }
+
+  // Show the cleaned URL back to user so they know we fixed it
+  document.getElementById('supabase-url').value = url;
+
+  if (rawUrl !== url) {
+    toast('已自动修正 URL（移除多余路径）');
+  }
+
+  var config = { url: url, anonKey: key, appUrl: appUrl };
   localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(config));
-  document.getElementById('supabase-config-status').textContent = '✅ 已保存';
+  document.getElementById('supabase-config-status').textContent = '✅ 已保存 (' + url + ')';
   toast('配置已保存');
   initSupabase();
 }
@@ -523,27 +542,14 @@ async function loadSupabaseSDK() {
   throw new Error('All Supabase SDK URLs failed');
 }
 
-async function validateSupabaseClient(client, url, anonKey) {
-  // Verify client can make authenticated requests
-  try {
-    var testUrl = url.replace(/\/$/, '') + '/auth/v1/settings';
-    var resp = await fetch(testUrl, {
-      headers: { 'apikey': anonKey, 'Authorization': 'Bearer ' + anonKey }
-    });
-    // Any response means the key reached the server (200 = ok, 401/403 = key works but needs auth)
-    // If we get back JSON, the request went through
-    return resp.ok || resp.status === 401 || resp.status === 403;
-  } catch(e) {
-    console.warn('Supabase validation request failed:', e.message);
-    return false;
-  }
-}
-
 async function initSupabase() {
   var config = getSupabaseConfig();
   var indicator = document.getElementById('supabase-sync-indicator');
   var loginBtn = document.getElementById('btn-github-login');
   if (!indicator) return;
+
+  // Sanitize URL in case it was saved with bad formatting
+  if (config.url) { config.url = sanitizeSupabaseUrl(config.url); }
 
   if (!config.url || !config.anonKey) {
     indicator.textContent = '⚠️ 未配置 Supabase，仅本地存储';
@@ -558,29 +564,23 @@ async function initSupabase() {
 
   try {
     var createClient = await loadSupabaseSDK();
-    indicator.textContent = '🔄 正在验证连接...';
 
-    // Validate the anon key works before creating the client
-    var keyValid = await validateSupabaseClient(null, config.url, config.anonKey);
-    if (!keyValid) {
-      throw new Error('无法连接到 Supabase，请检查 URL 和 Anon Key 是否正确');
-    }
-
+    // Create the Supabase client with the CLEANED URL
     supabase = createClient(config.url, config.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
     supabaseReady = true;
     if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
-    indicator.textContent = '🔄 正在检查登录状态...';
+    indicator.textContent = '☁️ 已连接 ' + config.url;
     await checkSupabaseSession();
     subscribeToChanges();
   } catch(e) {
     console.error('Supabase init error:', e);
     supabase = null;
     supabaseReady = false;
-    indicator.textContent = '⚠️ ' + e.message;
+    indicator.textContent = '⚠️ 连接失败: ' + (e.message || '未知错误');
     if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '❌ 连接失败'; }
-    toast('Supabase 初始化失败: ' + e.message);
+    toast('初始化失败: ' + (e.message || ''));
   }
 }
 
@@ -609,15 +609,16 @@ async function checkSupabaseSession() {
 }
 
 function getRedirectUrl() {
-  // Build a clean redirect URL (no query params, no hash)
-  var base = window.location.origin + window.location.pathname;
-  // If on file:// protocol, try the user-configured app URL
-  if (window.location.protocol === 'file:') {
-    var config = getSupabaseConfig();
-    if (config.appUrl) { return config.appUrl; }
-    return null; // Can't use file:// for OAuth
+  // Auto-detect: use the actual page URL if served via HTTP(S)
+  if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    return window.location.origin + window.location.pathname;
   }
-  return base;
+  // file:// protocol — must use the user-configured page URL
+  var config = getSupabaseConfig();
+  if (config.appUrl) {
+    return config.appUrl.replace(/\/+$/, '') + '/index.html';
+  }
+  return null;
 }
 
 async function supabaseLogin() {
