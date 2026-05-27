@@ -472,15 +472,71 @@ function saveSupabaseConfig() {
   initSupabase();
 }
 
-function loadSupabaseSDK() {
-  return new Promise(function(resolve, reject) {
-    if (window.supabase && window.supabase.createClient) { resolve(window.supabase); return; }
-    var script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js';
-    script.onload = function() { resolve(window.supabase); };
-    script.onerror = function() { reject(new Error('SDK load failed')); };
-    document.head.appendChild(script);
-  });
+var _supabaseCreateClient = null;
+
+async function loadSupabaseSDK() {
+  // Return cached createClient if already loaded
+  if (_supabaseCreateClient) return _supabaseCreateClient;
+
+  // Try CDN URLs in order: ESM (most reliable) first, then UMD fallbacks
+  var urls = [
+    'https://esm.sh/@supabase/supabase-js@2.45.0',
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js'
+  ];
+
+  for (var i = 0; i < urls.length; i++) {
+    try {
+      if (i === 0) {
+        // ESM: use dynamic import
+        var mod = await import(urls[i]);
+        if (mod && mod.createClient) {
+          _supabaseCreateClient = mod.createClient;
+          return _supabaseCreateClient;
+        }
+      } else {
+        // UMD: use script tag
+        var result = await new Promise(function(resolve, reject) {
+          if (window.supabase && window.supabase.createClient) {
+            _supabaseCreateClient = window.supabase.createClient;
+            resolve(_supabaseCreateClient);
+            return;
+          }
+          var script = document.createElement('script');
+          script.src = urls[i];
+          script.onload = function() {
+            if (window.supabase && window.supabase.createClient) {
+              _supabaseCreateClient = window.supabase.createClient;
+              resolve(_supabaseCreateClient);
+            } else {
+              reject(new Error('SDK loaded but createClient not found'));
+            }
+          };
+          script.onerror = function() { reject(new Error('Script load failed: ' + urls[i])); };
+          document.head.appendChild(script);
+        });
+        if (result) return result;
+      }
+    } catch(e) {
+      console.warn('Supabase SDK URL ' + (i+1) + ' failed:', e.message);
+    }
+  }
+  throw new Error('All Supabase SDK URLs failed');
+}
+
+async function validateSupabaseClient(client, url, anonKey) {
+  // Verify client can make authenticated requests
+  try {
+    var testUrl = url.replace(/\/$/, '') + '/auth/v1/settings';
+    var resp = await fetch(testUrl, {
+      headers: { 'apikey': anonKey, 'Authorization': 'Bearer ' + anonKey }
+    });
+    // Any response means the key reached the server (200 = ok, 401/403 = key works but needs auth)
+    // If we get back JSON, the request went through
+    return resp.ok || resp.status === 401 || resp.status === 403;
+  } catch(e) {
+    console.warn('Supabase validation request failed:', e.message);
+    return false;
+  }
 }
 
 async function initSupabase() {
@@ -488,29 +544,43 @@ async function initSupabase() {
   var indicator = document.getElementById('supabase-sync-indicator');
   var loginBtn = document.getElementById('btn-github-login');
   if (!indicator) return;
+
   if (!config.url || !config.anonKey) {
     indicator.textContent = '⚠️ 未配置 Supabase，仅本地存储';
     supabaseReady = false;
+    supabase = null;
     if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⚠️ 请先配置 Supabase'; }
     return;
   }
+
+  if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⏳ 加载中...'; }
+  indicator.textContent = '🔄 正在加载 SDK...';
+
   try {
-    await loadSupabaseSDK();
-    if (!window.supabase || !window.supabase.createClient) {
-      throw new Error('Supabase SDK 加载失败');
+    var createClient = await loadSupabaseSDK();
+    indicator.textContent = '🔄 正在验证连接...';
+
+    // Validate the anon key works before creating the client
+    var keyValid = await validateSupabaseClient(null, config.url, config.anonKey);
+    if (!keyValid) {
+      throw new Error('无法连接到 Supabase，请检查 URL 和 Anon Key 是否正确');
     }
-    supabase = window.supabase.createClient(config.url, config.anonKey);
+
+    supabase = createClient(config.url, config.anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
     supabaseReady = true;
     if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
-    indicator.textContent = '🔄 正在连接...';
+    indicator.textContent = '🔄 正在检查登录状态...';
     await checkSupabaseSession();
     subscribeToChanges();
   } catch(e) {
     console.error('Supabase init error:', e);
     supabase = null;
     supabaseReady = false;
-    indicator.textContent = '⚠️ Supabase 连接失败，仅本地存储';
+    indicator.textContent = '⚠️ ' + e.message;
     if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '❌ 连接失败'; }
+    toast('Supabase 初始化失败: ' + e.message);
   }
 }
 
