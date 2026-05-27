@@ -341,11 +341,39 @@ input[type="date"].form-input { min-width: 150px; flex: 0 0 auto; }
     <div id="staff-list" style="margin-top:12px;"></div>
   </div>
   <div class="card">
-    <div class="card-title"><span class="icon">🔄</span> 跨设备同步</div>
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">在一台设备导出数据，在另一台设备导入，即可实现数据同步。导入时会智能合并，不会丢失任何数据。</p>
+    <div class="card-title"><span class="icon">☁️</span> Supabase 云同步</div>
+    <div id="supabase-auth-section">
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">登录 GitHub 账号后，所有数据自动云端同步，多设备实时更新。</p>
+      <div id="supabase-login-status" style="margin-bottom:10px;font-size:13px;"></div>
+      <button class="btn btn-primary" id="btn-github-login" onclick="supabaseLogin()" style="background:#24292e;">🔐 GitHub 登录</button>
+      <button class="btn btn-outline btn-sm" id="btn-github-logout" onclick="supabaseLogout()" style="display:none;">退出登录</button>
+    </div>
+    <div id="supabase-config-section" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">首次使用需配置 Supabase 连接信息（在 Supabase 控制台 → Settings → API 中复制）：</p>
+      <div class="form-row">
+        <label class="form-label" style="font-size:12px;">Supabase URL</label>
+        <input type="text" class="form-input" id="supabase-url" placeholder="https://xxxxx.supabase.co" style="font-size:13px;">
+      </div>
+      <div class="form-row">
+        <label class="form-label" style="font-size:12px;">Anon Key</label>
+        <input type="text" class="form-input" id="supabase-anon-key" placeholder="eyJhbGci..." style="font-size:13px;">
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="saveSupabaseConfig()" style="margin-top:8px;">💾 保存配置</button>
+      <span id="supabase-config-status" style="font-size:12px;margin-left:8px;"></span>
+      <div class="form-row" style="margin-top:8px;">
+        <label class="form-label" style="font-size:12px;">应用网址</label>
+        <input type="text" class="form-input" id="supabase-app-url" placeholder="https://xxx.github.io/restaurant-app/" style="font-size:13px;">
+        <span style="font-size:11px;color:var(--text-secondary);">OAuth 回调地址（需与 Supabase 中配置一致）</span>
+      </div>
+    </div>
+    <div id="supabase-sync-indicator" style="margin-top:8px;font-size:12px;color:var(--text-secondary);"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="icon">📂</span> 离线备份</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">手动导出 / 导入 JSON 作为离线备份。</p>
     <div class="btn-group">
-      <button class="btn btn-outline" onclick="exportAllData()">📤 导出全部数据 (JSON)</button>
-      <button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()">📥 导入数据 (JSON)</button>
+      <button class="btn btn-outline btn-sm" onclick="exportAllData()">📤 导出 JSON</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('import-file-input').click()">📥 导入 JSON</button>
     </div>
     <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="importAllData(this)">
     <div id="sync-status" style="margin-top:8px;font-size:13px;"></div>
@@ -419,7 +447,251 @@ function load(key) {
 }
 function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
 let staffList = load(KEYS.STAFF);
-function saveStaff() { save(KEYS.STAFF, staffList); renderStaffList(); }
+function saveStaff() { save(KEYS.STAFF, staffList); renderStaffList(); syncStaffToCloud(); }
+
+// ==================== SUPABASE ====================
+const SUPABASE_CONFIG_KEY = 'resto_supabase_config';
+let supabase = null;
+let supabaseAuthed = false;
+let supabaseReady = false;
+
+function getSupabaseConfig() {
+  try { return JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveSupabaseConfig() {
+  const url = document.getElementById('supabase-url').value.trim();
+  const key = document.getElementById('supabase-anon-key').value.trim();
+  const appUrl = document.getElementById('supabase-app-url').value.trim();
+  if (!url || !key) { toast('请填写 URL 和 Anon Key'); return; }
+  const config = { url, anonKey: key, appUrl: appUrl };
+  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(config));
+  document.getElementById('supabase-config-status').textContent = '✅ 已保存';
+  toast('配置已保存');
+  initSupabase();
+}
+
+function loadSupabaseSDK() {
+  return new Promise(function(resolve, reject) {
+    if (window.supabase && window.supabase.createClient) { resolve(window.supabase); return; }
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js';
+    script.onload = function() { resolve(window.supabase); };
+    script.onerror = function() { reject(new Error('SDK load failed')); };
+    document.head.appendChild(script);
+  });
+}
+
+async function initSupabase() {
+  var config = getSupabaseConfig();
+  var indicator = document.getElementById('supabase-sync-indicator');
+  var loginBtn = document.getElementById('btn-github-login');
+  if (!indicator) return;
+  if (!config.url || !config.anonKey) {
+    indicator.textContent = '⚠️ 未配置 Supabase，仅本地存储';
+    supabaseReady = false;
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⚠️ 请先配置 Supabase'; }
+    return;
+  }
+  try {
+    await loadSupabaseSDK();
+    if (!window.supabase || !window.supabase.createClient) {
+      throw new Error('Supabase SDK 加载失败');
+    }
+    supabase = window.supabase.createClient(config.url, config.anonKey);
+    supabaseReady = true;
+    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
+    indicator.textContent = '🔄 正在连接...';
+    await checkSupabaseSession();
+    subscribeToChanges();
+  } catch(e) {
+    console.error('Supabase init error:', e);
+    supabase = null;
+    supabaseReady = false;
+    indicator.textContent = '⚠️ Supabase 连接失败，仅本地存储';
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '❌ 连接失败'; }
+  }
+}
+
+async function checkSupabaseSession() {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      supabaseAuthed = true;
+      document.getElementById('supabase-login-status').innerHTML = '<span style="color:#15803D;">✅ 已登录: ' + (data.session.user.email || data.session.user.user_metadata?.user_name || 'GitHub') + '</span>';
+      document.getElementById('btn-github-login').style.display = 'none';
+      document.getElementById('btn-github-logout').style.display = '';
+      document.getElementById('supabase-sync-indicator').textContent = '☁️ 已连接 Supabase · 实时同步中';
+      loadFromCloud(); // Pull latest data
+    } else {
+      supabaseAuthed = false;
+      document.getElementById('supabase-login-status').innerHTML = '<span style="color:#F59E0B;">⚠️ 未登录，请点击 GitHub 登录</span>';
+      document.getElementById('btn-github-login').style.display = '';
+      document.getElementById('btn-github-logout').style.display = 'none';
+      document.getElementById('supabase-sync-indicator').textContent = '⚠️ 未登录，仅本地存储';
+    }
+  } catch(e) {
+    document.getElementById('supabase-sync-indicator').textContent = '❌ 连接出错';
+    console.error(e);
+  }
+}
+
+function getRedirectUrl() {
+  // Build a clean redirect URL (no query params, no hash)
+  var base = window.location.origin + window.location.pathname;
+  // If on file:// protocol, try the user-configured app URL
+  if (window.location.protocol === 'file:') {
+    var config = getSupabaseConfig();
+    if (config.appUrl) { return config.appUrl; }
+    return null; // Can't use file:// for OAuth
+  }
+  return base;
+}
+
+async function supabaseLogin() {
+  if (!supabase || !supabaseReady) { toast('Supabase 尚未就绪，请等待连接或检查配置'); return; }
+
+  var redirectUrl = getRedirectUrl();
+  if (!redirectUrl) {
+    toast('❌ 检测到本地文件打开。请将页面部署到 Web 服务器（如 GitHub Pages），并在下方填写应用网址后重试。');
+    return;
+  }
+
+  var loginBtn = document.getElementById('btn-github-login');
+  if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⏳ 正在跳转 GitHub...'; }
+
+  try {
+    var { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: { redirectTo: redirectUrl }
+    });
+    if (error) {
+      toast('登录失败: ' + error.message);
+      if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
+    }
+  } catch(e) {
+    console.error('Login error:', e);
+    toast('登录出错: ' + (e.message || '未知错误'));
+    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
+  }
+}
+
+async function supabaseLogout() {
+  if (!supabase) return;
+  await supabase.auth.signOut();
+  supabaseAuthed = false;
+  document.getElementById('supabase-login-status').innerHTML = '<span style="color:#F59E0B;">⚠️ 已退出登录</span>';
+  document.getElementById('btn-github-login').style.display = '';
+  document.getElementById('btn-github-logout').style.display = 'none';
+  document.getElementById('supabase-sync-indicator').textContent = '⚠️ 未登录，仅本地存储';
+  toast('已退出登录');
+}
+
+function syncTurnoverToCloud(date, data) {
+  if (!supabase || !supabaseAuthed) return;
+  try {
+    supabase.from('turnover_records').upsert({ date: date, data: data, updated_at: new Date().toISOString() }, { onConflict: 'date' }).then(function(){}).catch(function(){});
+  } catch(e) { /* ignore */ }
+}
+
+function syncTipsToCloud(date, data) {
+  if (!supabase || !supabaseAuthed) return;
+  try {
+    supabase.from('tip_records').upsert({ date: date, data: data, updated_at: new Date().toISOString() }, { onConflict: 'date' }).then(function(){}).catch(function(){});
+  } catch(e) { /* ignore */ }
+}
+
+async function syncStaffToCloud() {
+  if (!supabase || !supabaseAuthed) return;
+  try {
+    supabase.from('staff_list').upsert({ id: 1, names: staffList, updated_at: new Date().toISOString() }).then(function(){}).catch(function(){});
+  } catch(e) { /* ignore */ }
+}
+
+async function loadFromCloud() {
+  if (!supabase || !supabaseAuthed) return;
+  try {
+    // Pull turnover records
+    const { data: tData, error: tErr } = await supabase.from('turnover_records').select('date,data');
+    if (!tErr && tData) {
+      const records = load(KEYS.RECORDS);
+      let updated = false;
+      tData.forEach(row => {
+        if (!records[row.date] || new Date(row.data.updated_at||0) > new Date(records[row.date].updated_at||0)) {
+          records[row.date] = row.data;
+          updated = true;
+        }
+      });
+      if (updated) save(KEYS.RECORDS, records);
+    }
+
+    // Pull tip records
+    const { data: tipData, error: tipErr } = await supabase.from('tip_records').select('date,data');
+    if (!tipErr && tipData) {
+      const tips = load(KEYS.TIPS);
+      let updated = false;
+      tipData.forEach(row => {
+        if (!tips[row.date] || new Date(row.data.updated_at||0) > new Date(tips[row.date].updated_at||0)) {
+          tips[row.date] = row.data;
+          updated = true;
+        }
+      });
+      if (updated) save(KEYS.TIPS, tips);
+    }
+
+    // Pull staff
+    const { data: sData, error: sErr } = await supabase.from('staff_list').select('names').eq('id', 1).single();
+    if (!sErr && sData && sData.names) {
+      let updated = false;
+      sData.names.forEach(n => { if (!staffList.includes(n)) { staffList.push(n); updated = true; } });
+      if (updated) saveStaff();
+    }
+
+    document.getElementById('supabase-sync-indicator').textContent = '☁️ 已连接 Supabase · 实时同步中';
+  } catch(e) {
+    console.error('Load from cloud error:', e);
+  }
+}
+
+function subscribeToChanges() {
+  if (!supabase) return;
+  try {
+    supabase.channel('turnover-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnover_records' }, function(payload) {
+        try {
+          var records = load(KEYS.RECORDS);
+          if (payload.new && payload.new.date) { records[payload.new.date] = payload.new.data; save(KEYS.RECORDS, records); }
+          if (payload.eventType === 'DELETE' && payload.old) { delete records[payload.old.date]; save(KEYS.RECORDS, records); }
+          var dash = document.getElementById('tab-dashboard');
+          if (dash && dash.classList.contains('active')) refreshDashboard();
+          var ind = document.getElementById('supabase-sync-indicator');
+          if (ind) ind.textContent = '☁️ 实时更新 ' + new Date().toLocaleTimeString();
+        } catch(e) {}
+      }).subscribe();
+
+    supabase.channel('tip-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tip_records' }, function(payload) {
+        try {
+          var tips = load(KEYS.TIPS);
+          if (payload.new && payload.new.date) { tips[payload.new.date] = payload.new.data; save(KEYS.TIPS, tips); }
+          if (payload.eventType === 'DELETE' && payload.old) { delete tips[payload.old.date]; save(KEYS.TIPS, tips); }
+          var dash = document.getElementById('tab-dashboard');
+          if (dash && dash.classList.contains('active')) refreshDashboard();
+          var ind = document.getElementById('supabase-sync-indicator');
+          if (ind) ind.textContent = '☁️ 实时更新 ' + new Date().toLocaleTimeString();
+        } catch(e) {}
+      }).subscribe();
+
+    supabase.channel('staff-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_list' }, function(payload) {
+        try {
+          if (payload.new && payload.new.names) { staffList = payload.new.names; save(KEYS.STAFF, staffList); renderStaffList(); }
+        } catch(e) {}
+      }).subscribe();
+  } catch(e) { /* ignore */ }
+}
 
 // ==================== DATA SYNC ====================
 function exportAllData() {
@@ -596,8 +868,7 @@ function saveTurnover() {
   save(KEYS.RECORDS, records);
   document.getElementById('turnover-saved-info').textContent = '✅ 已保存 ' + data.date;
   toast('已保存营业额');
-  // Also update data overview timestamp
-  document.getElementById('turnover-saved-info').dataset.savedAt = Date.now();
+  syncTurnoverToCloud(data.date, data);
 }
 
 function loadTurnoverRecord() {
@@ -825,6 +1096,7 @@ function saveTips() {
   save(KEYS.TIPS, tips);
   document.getElementById('tip-saved-info').textContent = '✅ 已保存 ' + data.date;
   toast('已保存小费');
+  syncTipsToCloud(data.date, data);
 }
 
 function loadTipRecord() {
@@ -1121,11 +1393,18 @@ function exportCustom() {
 
 // ==================== INIT ====================
 function init() {
+  // Load Supabase config first
+  const sc = getSupabaseConfig();
+  if (sc.url) document.getElementById('supabase-url').value = sc.url;
+  if (sc.anonKey) document.getElementById('supabase-anon-key').value = sc.anonKey;
+  if (sc.appUrl) document.getElementById('supabase-app-url').value = sc.appUrl;
+
   staffList = load(KEYS.STAFF);
   document.getElementById('turnover-date').value = todayStr();
   document.getElementById('tip-date').value = todayStr();
   renderMorningStaff(); renderEveningStaff(); renderStaffList();
   calcTurnover(); refreshDashboard();
+  initSupabase();
 }
 init();
 </script>
