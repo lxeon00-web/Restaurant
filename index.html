@@ -435,7 +435,7 @@ canvas {
       </details>
 
       <div class="actions">
-        <button class="btn primary" id="btn-save-tips">保存小费计算</button>
+        <button class="btn primary" id="btn-save-tips">提交小费计算</button>
       </div>
       <div class="status" id="tips-status"></div>
     </div>
@@ -554,6 +554,22 @@ canvas {
           <summary>这一天的小费数据</summary>
           <div class="details-body">
             <div class="grid" id="admin-tip-grid"></div>
+            <div class="metric-grid" style="margin-top:10px;">
+              <div class="metric"><div class="label">上午 厨房 Card</div><div class="value" id="admin-m-k-card">£0.00</div></div>
+              <div class="metric good"><div class="label">上午 厨房 Cash</div><div class="value" id="admin-m-k-cash">£0.00</div></div>
+              <div class="metric"><div class="label">上午 Floor Card</div><div class="value" id="admin-m-f-card">£0.00</div></div>
+              <div class="metric good"><div class="label">上午 Floor Cash</div><div class="value" id="admin-m-f-cash">£0.00</div></div>
+              <div class="metric"><div class="label">下午 厨房 Card</div><div class="value" id="admin-e-k-card">£0.00</div></div>
+              <div class="metric good"><div class="label">下午 厨房 Cash</div><div class="value" id="admin-e-k-cash">£0.00</div></div>
+              <div class="metric"><div class="label">下午 Floor Card</div><div class="value" id="admin-e-f-card">£0.00</div></div>
+              <div class="metric good"><div class="label">下午 Floor Cash</div><div class="value" id="admin-e-f-cash">£0.00</div></div>
+            </div>
+            <div class="panel-title" style="margin:14px 0 8px;">上午 Floor 人员</div>
+            <div id="admin-morning-staff-rows"></div>
+            <button class="btn outline mini" id="admin-add-morning-staff">添加上午人员</button>
+            <div class="panel-title" style="margin:14px 0 8px;">下午 Floor 人员</div>
+            <div id="admin-evening-staff-rows"></div>
+            <button class="btn outline mini" id="admin-add-evening-staff">添加下午人员</button>
             <div class="actions">
               <button class="btn primary" id="detail-save-tips">保存小费修改</button>
             </div>
@@ -608,6 +624,8 @@ let selectedDate = todayStr();
 let adminDate = null;
 let morningRows = [{ name: '', hours: 0 }];
 let eveningRows = [{ name: '', hours: 0 }];
+let adminMorningRows = [{ name: '', hours: 0 }];
+let adminEveningRows = [{ name: '', hours: 0 }];
 let chartMode = 'week';
 let supabase = null;
 let supabaseAuthed = false;
@@ -924,6 +942,10 @@ function subscribeToCloudChanges() {
         save(KEYS.staff, payload.new.names);
         renderStaffRows('morning');
         renderStaffRows('evening');
+        renderAdminStaffRows('morning');
+        renderAdminStaffRows('evening');
+        setTipsLocked(!!load(KEYS.tips)[selectedDate]);
+        calcAdminTips();
         renderStaffTable();
       }
     })
@@ -1060,7 +1082,7 @@ function loadTipsForDate() {
   renderStaffRows('morning');
   renderStaffRows('evening');
   calcTips();
-  $('tips-status').textContent = tips[selectedDate] ? '已载入 ' + selectedDate + ' 的小费记录。' : '';
+  setTipsLocked(!!tips[selectedDate]);
 }
 function normalizeStaffRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return [{ name: '', hours: 0 }];
@@ -1080,6 +1102,23 @@ function renderStaffRows(period) {
       '<div class="field"><label>工时</label><input type="number" step="0.25" value="' + (row.hours || '') + '" data-period="' + period + '" data-idx="' + idx + '" data-field="hours"></div>' +
       '<div class="staff-amount" id="' + period + '-amount-' + idx + '">Card: £0.00 Cash: £0.00</div>' +
       '<button class="btn danger mini remove-btn" data-remove-period="' + period + '" data-remove-idx="' + idx + '">删除</button>' +
+    '</div>';
+  }).join('');
+}
+function renderAdminStaffRows(period) {
+  const list = getStaffList();
+  const rows = period === 'morning' ? adminMorningRows : adminEveningRows;
+  const target = $('admin-' + period + '-staff-rows');
+  if (!target) return;
+  target.innerHTML = rows.map((row, idx) => {
+    const options = ['<option value="">-- 选择员工 --</option>'].concat(
+      list.map(name => '<option value="' + escapeAttr(name) + '"' + (name === row.name ? ' selected' : '') + '>' + escapeHtml(name) + '</option>')
+    ).join('');
+    return '<div class="staff-row">' +
+      '<div class="field"><label>员工</label><select data-admin-period="' + period + '" data-admin-idx="' + idx + '" data-admin-field="name">' + options + '</select></div>' +
+      '<div class="field"><label>工时</label><input type="number" step="0.25" value="' + (row.hours || '') + '" data-admin-period="' + period + '" data-admin-idx="' + idx + '" data-admin-field="hours"></div>' +
+      '<div class="staff-amount" id="admin-' + period + '-amount-' + idx + '">Card: £0.00 Cash: £0.00</div>' +
+      '<button class="btn danger mini remove-btn" data-admin-remove-period="' + period + '" data-admin-remove-idx="' + idx + '">删除</button>' +
     '</div>';
   }).join('');
 }
@@ -1107,6 +1146,12 @@ function calcTipsFromData(t, totalCardTips) {
 function collectRows(period) {
   return Array.from(document.querySelectorAll('[data-period="' + period + '"][data-field="name"]')).map((select, idx) => {
     const hours = document.querySelector('[data-period="' + period + '"][data-field="hours"][data-idx="' + idx + '"]');
+    return { name: select.value, hours: num(hours?.value) };
+  });
+}
+function collectAdminRows(period) {
+  return Array.from(document.querySelectorAll('[data-admin-period="' + period + '"][data-admin-field="name"]')).map((select, idx) => {
+    const hours = document.querySelector('[data-admin-period="' + period + '"][data-admin-field="hours"][data-admin-idx="' + idx + '"]');
     return { name: select.value, hours: num(hours?.value) };
   });
 }
@@ -1145,6 +1190,21 @@ function getTipFormData() {
   const evening = distribute(collectRows('evening'), pools.eFloorCard, pools.eFloorCash);
   return { ...base, ...pools, morningStaff: morning, eveningStaff: evening };
 }
+function getAdminTipEditorData() {
+  const records = load(KEYS.records);
+  const totalCardTips = records[adminDate]?.totalCardTips || 0;
+  const base = {
+    date: adminDate,
+    totalDailyCardTip: totalCardTips,
+    totalDailyCashTip: num(document.querySelector('[data-admin-tip="totalDailyCashTip"]')?.value),
+    morningCardTip: num(document.querySelector('[data-admin-tip="morningCardTip"]')?.value),
+    morningCashTip: num(document.querySelector('[data-admin-tip="morningCashTip"]')?.value)
+  };
+  const pools = calcTipsFromData(base, totalCardTips);
+  const morning = distribute(collectAdminRows('morning'), pools.mFloorCard, pools.mFloorCash);
+  const evening = distribute(collectAdminRows('evening'), pools.eFloorCard, pools.eFloorCash);
+  return { ...base, ...pools, morningStaff: morning, eveningStaff: evening };
+}
 function calcTips() {
   $('tip-total-card').value = money(currentTurnoverTips());
   const t = getTipFormData();
@@ -1166,6 +1226,36 @@ function calcTips() {
     if (el) el.textContent = 'Card: ' + money(r.cardAmount) + ' Cash: ' + money(r.cashAmount);
   });
 }
+function calcAdminTips() {
+  if (!adminDate) return;
+  const t = getAdminTipEditorData();
+  $('admin-m-k-card').textContent = money(t.mKitchenCard);
+  $('admin-m-k-cash').textContent = money(t.mKitchenCash);
+  $('admin-m-f-card').textContent = money(t.mFloorCard);
+  $('admin-m-f-cash').textContent = money(t.mFloorCash);
+  $('admin-e-k-card').textContent = money(t.eKitchenCard);
+  $('admin-e-k-cash').textContent = money(t.eKitchenCash);
+  $('admin-e-f-card').textContent = money(t.eFloorCard);
+  $('admin-e-f-cash').textContent = money(t.eFloorCash);
+  t.morningStaff.forEach((r, i) => {
+    const el = $('admin-morning-amount-' + i);
+    if (el) el.textContent = 'Card: ' + money(r.cardAmount) + ' Cash: ' + money(r.cashAmount);
+  });
+  t.eveningStaff.forEach((r, i) => {
+    const el = $('admin-evening-amount-' + i);
+    if (el) el.textContent = 'Card: ' + money(r.cardAmount) + ' Cash: ' + money(r.cashAmount);
+  });
+}
+function setTipsLocked(locked) {
+  ['tip-total-cash', 'morning-card-tip', 'morning-cash-tip'].forEach(id => $(id).disabled = locked);
+  document.querySelectorAll('[data-period="morning"], [data-period="evening"]').forEach(el => el.disabled = locked);
+  document.querySelectorAll('[data-remove-period]').forEach(btn => btn.disabled = locked);
+  $('add-morning-staff').disabled = locked;
+  $('add-evening-staff').disabled = locked;
+  $('btn-save-tips').disabled = locked;
+  $('tips-state').textContent = locked ? '小费已提交，员工模式已锁定' : (currentTurnoverTips() ? 'Total card tips 已锁定' : '请先提交每日营业额');
+  $('tips-status').textContent = locked ? '这一天的小费计算已经提交。只有管理员可在后台查看和修改。' : '';
+}
 function saveTips() {
   if (!load(KEYS.records)[selectedDate]) {
     showToast('请先提交这一天的每日营业额');
@@ -1180,6 +1270,7 @@ function saveTips() {
   syncTipToCloud(selectedDate, data);
   showToast('小费计算已保存');
   $('tips-status').textContent = '已保存 ' + selectedDate;
+  setTipsLocked(true);
   refreshAdmin();
 }
 function validateTipStaff(data) {
@@ -1263,6 +1354,11 @@ function openDetail(date) {
   $('admin-tip-grid').innerHTML = adminFields([
     ['totalDailyCashTip', '全天 Cash 小费'], ['morningCardTip', '上午 Card 小费'], ['morningCashTip', '上午 Cash 小费']
   ], t, 'tip') + '<div class="field"><label>Total card tips</label><input readonly value="' + money(r.totalCardTips) + '"></div>';
+  adminMorningRows = normalizeStaffRows(t.morningStaff);
+  adminEveningRows = normalizeStaffRows(t.eveningStaff);
+  renderAdminStaffRows('morning');
+  renderAdminStaffRows('evening');
+  calcAdminTips();
   $('admin-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function adminFields(fields, data, prefix) {
@@ -1310,20 +1406,10 @@ function saveAdminTips() {
   const records = load(KEYS.records);
   if (!records[adminDate]) return;
   const tips = load(KEYS.tips);
-  const old = tips[adminDate] || { date: adminDate };
-  document.querySelectorAll('[data-admin-tip]').forEach(input => {
-    old[input.dataset.adminTip] = num(input.value);
-  });
-  const pools = calcTipsFromData(old, records[adminDate].totalCardTips);
-  tips[adminDate] = {
-    ...old,
-    date: adminDate,
-    totalDailyCardTip: records[adminDate].totalCardTips,
-    ...pools,
-    morningStaff: distribute(normalizeStaffRows(old.morningStaff), pools.mFloorCard, pools.mFloorCash),
-    eveningStaff: distribute(normalizeStaffRows(old.eveningStaff), pools.eFloorCard, pools.eFloorCash),
-    updatedAt: new Date().toISOString()
-  };
+  const data = getAdminTipEditorData();
+  if (!validateTipStaff(data)) return;
+  data.updatedAt = new Date().toISOString();
+  tips[adminDate] = data;
   save(KEYS.tips, tips);
   syncTipToCloud(adminDate, tips[adminDate]);
   if (adminDate === selectedDate) loadTipsForDate();
@@ -1347,6 +1433,10 @@ function addStaff() {
   $('new-staff-name').value = '';
   renderStaffRows('morning');
   renderStaffRows('evening');
+  renderAdminStaffRows('morning');
+  renderAdminStaffRows('evening');
+  setTipsLocked(!!load(KEYS.tips)[selectedDate]);
+  calcAdminTips();
   renderStaffTable();
 }
 function deleteStaff(idx) {
@@ -1356,6 +1446,10 @@ function deleteStaff(idx) {
   syncStaffToCloud();
   renderStaffRows('morning');
   renderStaffRows('evening');
+  renderAdminStaffRows('morning');
+  renderAdminStaffRows('evening');
+  setTipsLocked(!!load(KEYS.tips)[selectedDate]);
+  calcAdminTips();
   renderStaffTable();
 }
 
@@ -1579,6 +1673,8 @@ $('btn-github-logout').addEventListener('click', supabaseLogout);
 $('btn-cloud-pull').addEventListener('click', loadFromCloud);
 $('add-morning-staff').addEventListener('click', () => { morningRows = collectRows('morning'); morningRows.push({ name: '', hours: 0 }); renderStaffRows('morning'); calcTips(); });
 $('add-evening-staff').addEventListener('click', () => { eveningRows = collectRows('evening'); eveningRows.push({ name: '', hours: 0 }); renderStaffRows('evening'); calcTips(); });
+$('admin-add-morning-staff').addEventListener('click', () => { adminMorningRows = collectAdminRows('morning'); adminMorningRows.push({ name: '', hours: 0 }); renderAdminStaffRows('morning'); calcAdminTips(); });
+$('admin-add-evening-staff').addEventListener('click', () => { adminEveningRows = collectAdminRows('evening'); adminEveningRows.push({ name: '', hours: 0 }); renderAdminStaffRows('evening'); calcAdminTips(); });
 $('btn-add-staff').addEventListener('click', addStaff);
 $('detail-close').addEventListener('click', () => $('admin-detail').style.display = 'none');
 $('detail-save-turnover').addEventListener('click', saveAdminTurnover);
@@ -1594,6 +1690,11 @@ document.addEventListener('input', e => {
     else eveningRows = collectRows('evening');
     calcTips();
   }
+  if (e.target.matches('[data-admin-period]') || e.target.matches('[data-admin-tip]')) {
+    if (e.target.dataset.adminPeriod === 'morning') adminMorningRows = collectAdminRows('morning');
+    if (e.target.dataset.adminPeriod === 'evening') adminEveningRows = collectAdminRows('evening');
+    calcAdminTips();
+  }
 });
 document.addEventListener('click', e => {
   const removePeriod = e.target.dataset.removePeriod;
@@ -1605,6 +1706,16 @@ document.addEventListener('click', e => {
     else eveningRows = rows;
     renderStaffRows(removePeriod);
     calcTips();
+  }
+  const adminRemovePeriod = e.target.dataset.adminRemovePeriod;
+  if (adminRemovePeriod) {
+    const rows = adminRemovePeriod === 'morning' ? collectAdminRows('morning') : collectAdminRows('evening');
+    rows.splice(parseInt(e.target.dataset.adminRemoveIdx, 10), 1);
+    if (!rows.length) rows.push({ name: '', hours: 0 });
+    if (adminRemovePeriod === 'morning') adminMorningRows = rows;
+    else adminEveningRows = rows;
+    renderAdminStaffRows(adminRemovePeriod);
+    calcAdminTips();
   }
   if (e.target.dataset.detailDate) openDetail(e.target.dataset.detailDate);
   if (e.target.dataset.exportDay) exportWorkbook(e.target.dataset.exportDay, e.target.dataset.exportDay);
