@@ -3,1481 +3,1624 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>餐厅每日算账</title>
+<title>餐厅每日算账 V2</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root {
-  --primary: #2563EB; --primary-light: #DBEAFE;
-  --danger: #EF4444; --danger-light: #FEE2E2;
-  --success: #10B981; --success-light: #D1FAE5;
-  --warning: #F59E0B; --warning-light: #FEF3C7;
-  --bg: #F3F4F6; --card: #FFFFFF; --text: #1F2937;
-  --text-secondary: #6B7280; --border: #D1D5DB;
-  --radius: 14px; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --blue: #2563eb;
+  --blue-50: #eff6ff;
+  --green: #059669;
+  --green-50: #ecfdf5;
+  --red: #dc2626;
+  --red-50: #fef2f2;
+  --amber: #d97706;
+  --amber-50: #fffbeb;
+  --ink: #172033;
+  --muted: #64748b;
+  --line: #d6dce8;
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg); color: var(--text);
-  -webkit-font-smoothing: antialiased; min-height: 100vh; padding-bottom: 40px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
-.app-header {
-  background: var(--primary); color: #fff; padding: 16px 20px;
-  text-align: center; position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+button, input, select {
+  font: inherit;
 }
-.app-header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
-.tab-bar {
-  display: flex; background: var(--card); border-bottom: 1px solid var(--border);
-  position: sticky; top: 56px; z-index: 99; overflow-x: auto; -webkit-overflow-scrolling: touch;
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--blue);
+  color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
 }
-.tab-btn {
-  flex: 1 0 auto; padding: 14px 10px; border: none; background: none;
-  font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer;
-  white-space: nowrap; border-bottom: 2.5px solid transparent; transition: all 0.15s;
-  min-width: 60px; text-align: center; -webkit-tap-highlight-color: transparent;
+.title {
+  font-size: 18px;
+  font-weight: 700;
 }
-.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
-.tab-content { display: none; padding: 16px; max-width: 900px; margin: 0 auto; }
-.tab-content.active { display: block; }
-.card {
-  background: var(--card); border-radius: var(--radius); padding: 20px;
-  margin-bottom: 16px; box-shadow: var(--shadow);
+.date-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
-.card-title {
-  font-size: 16px; font-weight: 600; margin-bottom: 16px; padding-bottom: 10px;
-  border-bottom: 1px solid var(--border); color: var(--text);
-  display: flex; align-items: center; gap: 8px;
+.date-box input {
+  width: 145px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 9px;
 }
-.card-title .icon { font-size: 20px; }
-.form-row {
-  display: flex; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap;
+.tabs {
+  position: sticky;
+  top: 49px;
+  z-index: 19;
+  display: flex;
+  overflow-x: auto;
+  background: white;
+  border-bottom: 1px solid var(--line);
 }
-.form-row:last-child { margin-bottom: 0; }
-.form-label { font-size: 14px; color: var(--text); min-width: 110px; font-weight: 500; flex-shrink: 0; }
-.form-input {
-  flex: 1; min-width: 120px; padding: 10px 12px; border: 1.5px solid var(--border);
-  border-radius: 10px; font-size: 15px; background: #FAFAFA;
-  transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none;
+.tab {
+  flex: 1 0 auto;
+  min-width: 88px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: white;
+  color: var(--muted);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
 }
-.form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); background: #fff; }
-.form-input[readonly] { background: #F0F9FF; border-color: #BAE6FD; color: #0369A1; font-weight: 600; }
-.form-input.result-match { background: #F0FDF4; border-color: #86EFAC; color: #15803D; }
-.form-input.result-diff { background: #FEF2F2; border-color: #FECACA; color: #DC2626; }
-.form-row.divider { border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 4px; }
-.result-badge {
-  display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap;
+.tab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
 }
-.result-badge.match { background: var(--success-light); color: #15803D; }
-.result-badge.diff { background: var(--danger-light); color: #DC2626; }
+.wrap {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 12px;
+}
+.view { display: none; }
+.view.active { display: block; }
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.panel-title {
+  font-weight: 750;
+  font-size: 15px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(135px, 1fr));
+  gap: 8px;
+}
+.field {
+  min-width: 0;
+}
+.field label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.field input, .field select {
+  width: 100%;
+  min-height: 38px;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--ink);
+  padding: 8px 9px;
+}
+.field input[readonly] {
+  background: var(--blue-50);
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+}
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+.metric .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.metric .value {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--blue);
+}
+.metric.good .value { color: var(--green); }
+.metric.warn .value { color: var(--amber); }
+.metric.bad .value { color: var(--red); }
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--green-50);
+  border: 1px solid #bbf7d0;
+}
+.summary strong {
+  font-size: 24px;
+  color: var(--green);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
 .btn {
-  padding: 12px 22px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent;
-  display: inline-flex; align-items: center; gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 750;
+  cursor: pointer;
+  background: #e2e8f0;
+  color: var(--ink);
 }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:active { background: #1D4ED8; transform: scale(0.97); }
-.btn-success { background: var(--success); color: #fff; }
-.btn-success:active { background: #059669; transform: scale(0.97); }
-.btn-danger { background: var(--danger); color: #fff; padding: 6px 12px; font-size: 13px; }
-.btn-danger:active { background: #DC2626; transform: scale(0.97); }
-.btn-outline { background: #fff; color: var(--primary); border: 1.5px solid var(--primary); }
-.btn-outline:active { background: var(--primary-light); }
-.btn-sm { padding: 7px 12px; font-size: 12px; }
-.btn-xs { padding: 4px 10px; font-size: 11px; border-radius: 8px; }
-.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.btn.primary {
+  background: var(--blue);
+  color: white;
+}
+.btn.good {
+  background: var(--green);
+  color: white;
+}
+.btn.danger {
+  background: var(--red);
+  color: white;
+}
+.btn.outline {
+  background: white;
+  color: var(--blue);
+  border: 1.5px solid var(--blue);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.status {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.locked {
+  background: var(--amber-50);
+  border-color: #fde68a;
+}
+details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  margin-top: 10px;
+}
+summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+.details-body {
+  padding: 0 12px 12px;
+}
 .staff-row {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(125px, 1fr) 95px minmax(140px, 1.2fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
 }
-.staff-row select, .staff-row input {
-  padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 8px;
-  font-size: 14px; background: #FAFAFA;
+.staff-amount {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  font-weight: 700;
 }
-.staff-row select { min-width: 100px; flex: 1; }
-.staff-row input { width: 80px; }
-.staff-amount-split { font-weight: 600; font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; }
-.staff-amount-split .card-amt { color: #2563EB; }
-.staff-amount-split .cash-amt { color: #059669; }
-.staff-list-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; background: #F9FAFB; border-radius: 10px; margin-bottom: 6px;
+.mini {
+  font-size: 12px;
+  padding: 7px 10px;
 }
-.staff-list-item .name { font-size: 15px; font-weight: 500; }
-.empty-state { text-align: center; padding: 32px 16px; color: var(--text-secondary); }
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th, td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 800;
+}
+.admin-box {
+  max-width: 420px;
+  margin: 24px auto;
+}
+.chart-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+canvas {
+  width: 100%;
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
 .toast {
-  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-  background: #1F2937; color: #fff; padding: 12px 24px; border-radius: 24px;
-  font-size: 14px; font-weight: 500; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 60;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: #111827;
+  color: white;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
 }
 .toast.show { opacity: 1; }
-input[type="date"].form-input { min-width: 150px; flex: 0 0 auto; }
-
-/* Dashboard */
-.stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-.stat-card {
-  flex: 1; min-width: 100px; background: var(--card); border-radius: var(--radius);
-  padding: 16px; box-shadow: var(--shadow); text-align: center;
+@media (max-width: 820px) {
+  .grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+  .metric-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .topbar { align-items: flex-start; flex-direction: column; }
+  .tabs { top: 93px; }
 }
-.stat-card .stat-value { font-size: 22px; font-weight: 700; color: var(--primary); }
-.stat-card .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-.daily-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.daily-table th { background: #F8FAFC; padding: 10px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); font-size: 12px; }
-.daily-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
-.daily-table tr:active { background: var(--primary-light); }
-.daily-table .diff-cell.match { color: #15803D; font-weight: 600; }
-.daily-table .diff-cell.mismatch { color: #DC2626; font-weight: 600; }
-.export-options { display: flex; gap: 8px; flex-wrap: wrap; }
-.sync-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.sync-section p { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
-
-@media (max-width: 480px) {
-  .form-row { flex-direction: column; align-items: stretch; gap: 4px; }
-  .form-label { min-width: auto; }
-  .tab-btn { font-size: 11px; padding: 12px 6px; }
-  .card { padding: 14px; }
-  .daily-table { font-size: 11px; }
-  .daily-table th, .daily-table td { padding: 6px 4px; }
+@media (max-width: 520px) {
+  .wrap { padding: 8px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .staff-row { grid-template-columns: 1fr 78px; }
+  .staff-amount { grid-column: 1 / -1; }
+  .staff-row .remove-btn { grid-column: 2; }
 }
 </style>
 </head>
 <body>
+<header class="topbar">
+  <div class="title">餐厅每日算账 V2</div>
+  <div class="date-box">
+    <span>当前日期</span>
+    <input type="date" id="current-date">
+  </div>
+</header>
 
-<div class="app-header"><h1>餐厅每日算账</h1></div>
+<nav class="tabs">
+  <button class="tab active" data-view="turnover">每日营业额</button>
+  <button class="tab" data-view="tips">小费计算</button>
+  <button class="tab" data-view="admin">管理员</button>
+</nav>
 
-<div class="tab-bar">
-  <button class="tab-btn active" data-tab="turnover">每日营业额</button>
-  <button class="tab-btn" data-tab="tips">小费计算</button>
-  <button class="tab-btn" data-tab="staff">员工管理</button>
-  <button class="tab-btn" data-tab="dashboard">数据总览</button>
-</div>
-
-<!-- ========== TAB 1: TURNOVER ========== -->
-<div class="tab-content active" id="tab-turnover">
-  <div class="card">
-    <div class="card-title"><span class="icon">📅</span> 日期</div>
-    <div class="form-row">
-      <label class="form-label">日期</label>
-      <input type="date" class="form-input" id="turnover-date" onchange="onTurnoverDateChange()">
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">🧾</span> 基础数据</div>
-    <div class="form-row">
-      <label class="form-label">小费金额 (Tip)</label>
-      <input type="number" step="0.01" class="form-input" id="tip-amount" placeholder="输入小费金额" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">今日总营业额 (Total)</label>
-      <input type="number" step="0.01" class="form-input" id="total-turnover" placeholder="输入今日总营业额" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Z Report</label>
-      <input type="text" class="form-input" id="z-report" readonly placeholder="= Total - Tip">
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">💳</span> 收款明细</div>
-    <div class="form-row">
-      <label class="form-label">卡机今日收入</label>
-      <input type="number" step="0.01" class="form-input" id="card-machine" placeholder="卡机收入金额" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Card 金额</label>
-      <input type="text" class="form-input" id="card-amount" readonly placeholder="= 卡机收入 - 小费">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Cash 金额</label>
-      <input type="number" step="0.01" class="form-input" id="cash-amount" placeholder="可为 0" value="0" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Online 金额</label>
-      <input type="number" step="0.01" class="form-input" id="online-amount" placeholder="输入 Online 收入" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Receipt 金额</label>
-      <input type="number" step="0.01" class="form-input" id="receipt-amount" placeholder="负数，如 -50.00" oninput="calcTurnover()">
-    </div>
-    <div class="form-row divider">
-      <label class="form-label">1Total</label>
-      <input type="text" class="form-input" id="one-total" readonly placeholder="= Card + Cash + Online + Receipt">
-      <span id="diff-badge"></span>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">🏦</span> 其他收入</div>
-    <div class="form-row">
-      <label class="form-label">Deposit 金额</label>
-      <input type="number" step="0.01" class="form-input" id="deposit-amount" placeholder="输入 Deposit" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Phone Deposit</label>
-      <input type="number" step="0.01" class="form-input" id="phone-deposit" placeholder="输入 Phone Deposit" oninput="calcTurnover()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Deliveroo 金额</label>
-      <input type="number" step="0.01" class="form-input" id="deliveroo-amount" placeholder="输入 Deliveroo" oninput="calcTurnover()">
-    </div>
-    <div class="form-row divider">
-      <label class="form-label">Grand Total</label>
-      <input type="text" class="form-input" id="grand-total" readonly placeholder="= 1Total + Deposit + Phone Deposit + Deliveroo" style="font-size:18px;">
-    </div>
-  </div>
-  <div class="btn-group">
-    <button class="btn btn-primary" onclick="saveTurnover()">💾 保存</button>
-    <button class="btn btn-outline" onclick="loadTurnoverRecord()">📂 加载今日</button>
-    <button class="btn btn-outline btn-sm" onclick="clearTurnover()">🔄 清空</button>
-  </div>
-  <div id="turnover-saved-info" style="margin-top:8px;font-size:13px;color:var(--text-secondary);"></div>
-</div>
-
-<!-- ========== TAB 2: TIPS ========== -->
-<div class="tab-content" id="tab-tips">
-  <div class="card">
-    <div class="card-title"><span class="icon">📅</span> 日期</div>
-    <div class="form-row">
-      <label class="form-label">日期</label>
-      <input type="date" class="form-input" id="tip-date" onchange="onTipDateChange()">
-    </div>
-  </div>
-  <!-- Morning Tips -->
-  <div class="card">
-    <div class="card-title"><span class="icon">🌅</span> 上午小费</div>
-    <div class="form-row">
-      <label class="form-label">Card 小费</label>
-      <input type="number" step="0.01" class="form-input" id="morning-card-tip" placeholder="上午卡小费" oninput="calcMorningTips()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Cash 小费</label>
-      <input type="number" step="0.01" class="form-input" id="morning-cash-tip" placeholder="上午现金小费" oninput="calcMorningTips()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">上午小费合计</label>
-      <input type="text" class="form-input" id="morning-total-tip" readonly>
-    </div>
-    <div class="form-row">
-      <label class="form-label">厨房 Card</label>
-      <input type="text" class="form-input" id="morning-kitchen-card" readonly style="color:#2563EB;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">厨房 Cash</label>
-      <input type="text" class="form-input" id="morning-kitchen-cash" readonly style="color:#059669;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Floor Card</label>
-      <input type="text" class="form-input" id="morning-floor-card" readonly style="color:#2563EB;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Floor Cash</label>
-      <input type="text" class="form-input" id="morning-floor-cash" readonly style="color:#059669;">
-    </div>
-    <div style="margin-top:12px;font-size:14px;font-weight:600;color:var(--text-secondary);">Floor 人员分配</div>
-    <div id="morning-staff-rows"></div>
-    <button class="btn btn-outline btn-sm" onclick="addMorningStaff()" style="margin-top:6px;">+ 添加 Floor 人员</button>
-  </div>
-  <!-- Evening Tips -->
-  <div class="card">
-    <div class="card-title"><span class="icon">🌙</span> 下午小费</div>
-    <div class="form-row">
-      <label class="form-label">本日总Card小费</label>
-      <input type="number" step="0.01" class="form-input" id="total-daily-card-tip" placeholder="同步自营业额(可改)" oninput="calcEveningTips()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">本日总Cash小费</label>
-      <input type="number" step="0.01" class="form-input" id="total-daily-cash-tip" placeholder="输入全天Cash小费总额" oninput="calcEveningTips()">
-    </div>
-    <div class="form-row">
-      <label class="form-label">上午已分Card</label>
-      <input type="text" class="form-input" id="morning-card-distributed" readonly>
-    </div>
-    <div class="form-row">
-      <label class="form-label">上午已分Cash</label>
-      <input type="text" class="form-input" id="morning-cash-distributed" readonly>
-    </div>
-    <div class="form-row">
-      <label class="form-label">下午Card小费池</label>
-      <input type="text" class="form-input" id="evening-card-pool" readonly>
-    </div>
-    <div class="form-row">
-      <label class="form-label">下午Cash小费池</label>
-      <input type="text" class="form-input" id="evening-cash-pool" readonly>
-    </div>
-    <div class="form-row">
-      <label class="form-label">厨房 Card</label>
-      <input type="text" class="form-input" id="evening-kitchen-card" readonly style="color:#2563EB;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">厨房 Cash</label>
-      <input type="text" class="form-input" id="evening-kitchen-cash" readonly style="color:#059669;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Floor Card</label>
-      <input type="text" class="form-input" id="evening-floor-card" readonly style="color:#2563EB;">
-    </div>
-    <div class="form-row">
-      <label class="form-label">Floor Cash</label>
-      <input type="text" class="form-input" id="evening-floor-cash" readonly style="color:#059669;">
-    </div>
-    <div style="margin-top:12px;font-size:14px;font-weight:600;color:var(--text-secondary);">Floor 人员分配</div>
-    <div id="evening-staff-rows"></div>
-    <button class="btn btn-outline btn-sm" onclick="addEveningStaff()" style="margin-top:6px;">+ 添加 Floor 人员</button>
-  </div>
-  <div class="btn-group">
-    <button class="btn btn-primary" onclick="saveTips()">💾 保存</button>
-    <button class="btn btn-outline" onclick="loadTipRecord()">📂 加载今日</button>
-    <button class="btn btn-outline btn-sm" onclick="clearTips()">🔄 清空</button>
-  </div>
-  <div id="tip-saved-info" style="margin-top:8px;font-size:13px;color:var(--text-secondary);"></div>
-</div>
-
-<!-- ========== TAB 3: STAFF ========== -->
-<div class="tab-content" id="tab-staff">
-  <div class="card">
-    <div class="card-title"><span class="icon">👥</span> 员工名单</div>
-    <div class="form-row">
-      <input type="text" class="form-input" id="new-staff-name" placeholder="输入新员工姓名">
-      <button class="btn btn-primary" onclick="addStaff()">+ 添加</button>
-    </div>
-    <div id="staff-list" style="margin-top:12px;"></div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">☁️</span> Supabase 云同步</div>
-    <div id="supabase-auth-section">
-      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">登录 GitHub 账号后，所有数据自动云端同步，多设备实时更新。</p>
-      <div id="supabase-login-status" style="margin-bottom:10px;font-size:13px;"></div>
-      <button class="btn btn-primary" id="btn-github-login" onclick="supabaseLogin()" style="background:#24292e;">🔐 GitHub 登录</button>
-      <button class="btn btn-outline btn-sm" id="btn-github-logout" onclick="supabaseLogout()" style="display:none;">退出登录</button>
-    </div>
-    <div id="supabase-config-section" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">在 Supabase 控制台 → Settings → API 中复制以下信息（Project URL 只需根域名，不要带 /rest/v1/）：</p>
-      <div class="form-row">
-        <label class="form-label" style="font-size:12px;">Project URL</label>
-        <input type="text" class="form-input" id="supabase-url" placeholder="https://xxxxx.supabase.co" style="font-size:13px;">
+<main class="wrap">
+  <section class="view active" id="view-turnover">
+    <div class="panel" id="turnover-lock-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">每日营业额</div>
+          <div class="hint">选择日期会自动载入当天记录。已提交后普通员工不能清空或修改。</div>
+        </div>
+        <div class="hint" id="turnover-state">新记录</div>
       </div>
-      <div class="form-row">
-        <label class="form-label" style="font-size:12px;">Anon Key</label>
-        <input type="text" class="form-input" id="supabase-anon-key" placeholder="eyJhbGci..." style="font-size:13px;">
+
+      <div class="grid">
+        <div class="field"><label>Card tips</label><input id="card-tips" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Extra tips</label><input id="extra-tips" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Total card tips</label><input id="total-card-tips" readonly></div>
+        <div class="field"><label>Total 今日总营业额</label><input id="total-turnover" type="number" step="0.01" inputmode="decimal"></div>
+
+        <div class="field"><label>Z Report = Total - Card tips</label><input id="z-report" readonly></div>
+        <div class="field"><label>卡机今日收入</label><input id="card-machine" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Card 金额</label><input id="card-amount" readonly></div>
+        <div class="field"><label>Cash 金额</label><input id="cash-amount" type="number" step="0.01" inputmode="decimal" value="0"></div>
+
+        <div class="field"><label>Online 金额</label><input id="online-amount" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Receipt 金额</label><input id="receipt-amount" type="number" step="0.01" inputmode="decimal" placeholder="如 -50"></div>
+        <div class="field"><label>1Total</label><input id="one-total" readonly></div>
+        <div class="field"><label>差额</label><input id="turnover-diff" readonly></div>
+
+        <div class="field"><label>Deposit 金额</label><input id="deposit-amount" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Phone Deposit</label><input id="phone-deposit" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Deliveroo 金额</label><input id="deliveroo-amount" type="number" step="0.01" inputmode="decimal"></div>
       </div>
-      <div class="form-row" style="margin-top:4px;">
-        <label class="form-label" style="font-size:12px;">页面地址</label>
-        <input type="text" class="form-input" id="supabase-app-url" placeholder="部署后的网页链接，如 https://xxx.github.io/restaurant-app/" style="font-size:13px;">
+
+      <div class="summary" style="margin-top:10px;">
+        <div>
+          <div class="hint">Grand Total</div>
+          <strong id="grand-total-text">£0.00</strong>
+        </div>
+        <button class="btn primary" id="btn-submit-turnover">提交今日营业额</button>
       </div>
-      <p style="font-size:10px;color:var(--text-secondary);margin-top:6px;">页面地址是你的 index.html 被访问的网址。如果是通过网址打开的（非本地文件），可留空自动获取。需将此地址添加到 Supabase → Authentication → URL Configuration → Redirect URLs 中。</p>
-      <button class="btn btn-outline btn-sm" onclick="saveSupabaseConfig()" style="margin-top:8px;">💾 保存配置</button>
-      <span id="supabase-config-status" style="font-size:12px;margin-left:8px;"></span>
+      <div class="status" id="turnover-status"></div>
     </div>
-    <div id="supabase-sync-indicator" style="margin-top:8px;font-size:12px;color:var(--text-secondary);"></div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">📂</span> 离线备份</div>
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">手动导出 / 导入 JSON 作为离线备份。</p>
-    <div class="btn-group">
-      <button class="btn btn-outline btn-sm" onclick="exportAllData()">📤 导出 JSON</button>
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('import-file-input').click()">📥 导入 JSON</button>
-    </div>
-    <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="importAllData(this)">
-    <div id="sync-status" style="margin-top:8px;font-size:13px;"></div>
-  </div>
-</div>
+  </section>
 
-<!-- ========== TAB 4: DASHBOARD ========== -->
-<div class="tab-content" id="tab-dashboard">
-  <!-- Stats Cards -->
-  <div class="stats-row" id="stats-row"></div>
+  <section class="view" id="view-tips">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">小费计算</div>
+          <div class="hint">本日总 Card 小费来自每日营业额的 Total card tips，员工不能手动改。</div>
+        </div>
+        <div class="hint" id="tips-state">等待营业额</div>
+      </div>
 
-  <!-- Daily Records Table -->
-  <div class="card">
-    <div class="card-title"><span class="icon">📋</span> 每日记录总览 <span style="font-weight:400;font-size:13px;color:var(--text-secondary);margin-left:8px;" id="record-count"></span></div>
-    <div style="overflow-x:auto;">
-      <table class="daily-table" id="daily-table">
-        <thead><tr><th>日期</th><th>Grand Total</th><th>Z Report</th><th>差异</th><th>小费</th><th>小费分配</th><th>操作</th></tr></thead>
-        <tbody id="daily-table-body"></tbody>
-      </table>
-    </div>
-    <div class="empty-state" id="empty-dashboard" style="display:none;">暂无记录，请先在每日营业额页面添加数据</div>
-  </div>
+      <div class="grid">
+        <div class="field"><label>Total card tips</label><input id="tip-total-card" readonly></div>
+        <div class="field"><label>全天 Cash 小费</label><input id="tip-total-cash" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>上午 Card 小费</label><input id="morning-card-tip" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>上午 Cash 小费</label><input id="morning-cash-tip" type="number" step="0.01" inputmode="decimal"></div>
+      </div>
 
-  <!-- Export Section -->
-  <div class="card">
-    <div class="card-title"><span class="icon">📥</span> 导出报表</div>
-    <div class="export-options">
-      <button class="btn btn-success" onclick="exportDay()">📅 导出今日</button>
-      <button class="btn btn-success" onclick="exportWeek()">📆 导出本周</button>
-      <button class="btn btn-success" onclick="exportMonth()">🗓️ 导出本月</button>
-      <button class="btn btn-outline" onclick="exportCustom()">📋 导出自定义范围</button>
+      <div class="metric-grid" style="margin-top:10px;">
+        <div class="metric"><div class="label">上午 厨房 Card</div><div class="value" id="m-k-card">£0.00</div></div>
+        <div class="metric good"><div class="label">上午 厨房 Cash</div><div class="value" id="m-k-cash">£0.00</div></div>
+        <div class="metric"><div class="label">上午 Floor Card</div><div class="value" id="m-f-card">£0.00</div></div>
+        <div class="metric good"><div class="label">上午 Floor Cash</div><div class="value" id="m-f-cash">£0.00</div></div>
+        <div class="metric"><div class="label">下午 厨房 Card</div><div class="value" id="e-k-card">£0.00</div></div>
+        <div class="metric good"><div class="label">下午 厨房 Cash</div><div class="value" id="e-k-cash">£0.00</div></div>
+        <div class="metric"><div class="label">下午 Floor Card</div><div class="value" id="e-f-card">£0.00</div></div>
+        <div class="metric good"><div class="label">下午 Floor Cash</div><div class="value" id="e-f-cash">£0.00</div></div>
+      </div>
+
+      <details>
+        <summary>员工 / 工时 / 详细分配</summary>
+        <div class="details-body">
+          <div class="panel-title" style="margin:4px 0 8px;">上午 Floor 人员</div>
+          <div id="morning-staff-rows"></div>
+          <button class="btn outline mini" id="add-morning-staff">添加上午人员</button>
+
+          <div class="panel-title" style="margin:14px 0 8px;">下午 Floor 人员</div>
+          <div id="evening-staff-rows"></div>
+          <button class="btn outline mini" id="add-evening-staff">添加下午人员</button>
+        </div>
+      </details>
+
+      <div class="actions">
+        <button class="btn primary" id="btn-save-tips">保存小费计算</button>
+      </div>
+      <div class="status" id="tips-status"></div>
     </div>
-    <div style="margin-top:10px;">
-      <label style="font-size:13px;">自定义范围：</label>
-      <input type="date" id="export-date-from" style="padding:6px;border-radius:8px;border:1px solid var(--border);margin:0 4px;">
-      <span style="font-size:13px;">至</span>
-      <input type="date" id="export-date-to" style="padding:6px;border-radius:8px;border:1px solid var(--border);margin:0 4px;">
+  </section>
+
+  <section class="view" id="view-admin">
+    <div class="panel admin-box" id="admin-login">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">管理员入口</div>
+          <div class="hint">员工管理、数据总览、历史修改需要密码。</div>
+        </div>
+      </div>
+      <div class="field"><label>管理员密码</label><input id="admin-password" type="password" inputmode="numeric"></div>
+      <div class="actions">
+        <button class="btn primary" id="btn-admin-login">进入管理员后台</button>
+      </div>
+      <div class="status" id="admin-login-status"></div>
     </div>
-    <div id="export-preview" style="margin-top:12px;"></div>
-  </div>
-</div>
+
+      <div id="admin-dashboard" style="display:none;">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Supabase 云同步</div>
+            <div class="hint">登录 GitHub 账号后，营业额、小费和员工名单会自动云端同步，适合 GitHub Pages 链接使用。</div>
+          </div>
+        </div>
+        <div id="supabase-login-status" class="status"></div>
+        <div class="actions">
+          <button class="btn primary" id="btn-github-login" style="background:#24292e;">GitHub 登录</button>
+          <button class="btn outline mini" id="btn-github-logout" style="display:none;">退出登录</button>
+          <button class="btn outline mini" id="btn-cloud-pull">从云端拉取</button>
+        </div>
+        <div class="grid" style="margin-top:10px;">
+          <div class="field"><label>Project URL</label><input id="supabase-url" placeholder="https://xxxxx.supabase.co"></div>
+          <div class="field"><label>Anon Key</label><input id="supabase-anon-key" placeholder="eyJhbGci..."></div>
+          <div class="field"><label>页面地址</label><input id="supabase-app-url" placeholder="https://你的用户名.github.io/Restaurant/"></div>
+          <div class="field"><label>&nbsp;</label><button class="btn outline" id="btn-save-supabase" style="width:100%;">保存配置</button></div>
+        </div>
+        <div class="hint" style="margin-top:8px;">页面地址需要加入 Supabase → Authentication → URL Configuration → Redirect URLs。Project URL 只填根域名，不要带 /rest/v1/。</div>
+        <div class="status" id="supabase-config-status"></div>
+        <div class="status" id="supabase-sync-indicator"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">数据总览</div>
+            <div class="hint">本周按周一到周日计算。</div>
+          </div>
+          <button class="btn outline mini" id="btn-admin-logout">退出管理员模式</button>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><div class="label">今日金额</div><div class="value" id="stat-today">£0.00</div></div>
+          <div class="metric"><div class="label">本周金额</div><div class="value" id="stat-week">£0.00</div></div>
+          <div class="metric"><div class="label">本月金额</div><div class="value" id="stat-month">£0.00</div></div>
+          <div class="metric warn"><div class="label">记录天数</div><div class="value" id="stat-days">0</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">营业额对比折线图</div>
+            <div class="hint">可切换和上周、上月、去年对比。</div>
+          </div>
+        </div>
+        <div class="chart-toolbar">
+          <button class="btn outline mini chart-mode" data-mode="week">和上周对比</button>
+          <button class="btn outline mini chart-mode" data-mode="month">和上月对比</button>
+          <button class="btn outline mini chart-mode" data-mode="year">和去年对比</button>
+        </div>
+        <canvas id="sales-chart" width="1040" height="320"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">历史记录</div>
+            <div class="hint">查看/修改会打开独立详情区，不跳回员工填写页。</div>
+          </div>
+          <div class="actions" style="margin-top:0;">
+            <button class="btn good mini" id="export-today">导出今日</button>
+            <button class="btn good mini" id="export-week">导出本周</button>
+            <button class="btn good mini" id="export-month">导出本月</button>
+          </div>
+        </div>
+        <div class="grid" style="margin-bottom:10px;">
+          <div class="field"><label>导出开始</label><input id="export-from" type="date"></div>
+          <div class="field"><label>导出结束</label><input id="export-to" type="date"></div>
+          <div class="field"><label>&nbsp;</label><button class="btn good" id="export-custom" style="width:100%;">导出自定义范围</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>日期</th><th>Grand Total</th><th>Total card tips</th><th>差额</th><th>操作</th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="admin-detail" style="display:none;">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title" id="detail-title">历史详情</div>
+            <div class="hint">这里修改历史记录，不会切换到员工填写页面。</div>
+          </div>
+          <button class="btn outline mini" id="detail-close">关闭详情</button>
+        </div>
+        <div class="grid" id="admin-turnover-grid"></div>
+        <div class="actions">
+          <button class="btn primary" id="detail-save-turnover">保存营业额修改</button>
+          <button class="btn good" id="detail-export-day">导出这一天</button>
+        </div>
+        <details open>
+          <summary>这一天的小费数据</summary>
+          <div class="details-body">
+            <div class="grid" id="admin-tip-grid"></div>
+            <div class="actions">
+              <button class="btn primary" id="detail-save-tips">保存小费修改</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">员工管理</div>
+            <div class="hint">这些员工会出现在小费分配下拉框。</div>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="field"><label>新员工姓名</label><input id="new-staff-name"></div>
+          <div class="field"><label>&nbsp;</label><button class="btn primary" id="btn-add-staff" style="width:100%;">添加员工</button></div>
+        </div>
+        <div class="table-wrap" style="margin-top:10px;">
+          <table>
+            <thead><tr><th>姓名</th><th>操作</th></tr></thead>
+            <tbody id="staff-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
-// ==================== HELPERS ====================
-function trunc2(n) { return Math.floor(n * 100) / 100; }
-function fmt(n) {
-  if (n == null || isNaN(n)) return '';
-  return '£' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtPlain(n) {
-  if (n == null || isNaN(n)) return '';
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function parseNum(s) { const v = parseFloat(String(s).replace(/[£,]/g, '')); return isNaN(v) ? 0 : v; }
-function todayStr() { return new Date().toISOString().split('T')[0]; }
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(t._timeout);
-  t._timeout = setTimeout(() => t.classList.remove('show'), 1800);
-}
+const ADMIN_PASSWORD = '221830';
+const SUPABASE_CONFIG_KEY = 'resto_v2_supabase_config';
+const CLOUD_TABLES = {
+  records: 'turnover_records_v2',
+  tips: 'tip_records_v2',
+  staff: 'staff_list_v2'
+};
+const KEYS = {
+  records: 'resto_v2_records',
+  tips: 'resto_v2_tips',
+  staff: 'resto_v2_staff',
+  admin: 'resto_v2_admin'
+};
 
-// ==================== STORAGE ====================
-const KEYS = { RECORDS: 'resto_records', TIPS: 'resto_tips', STAFF: 'resto_staff' };
-function load(key) {
-  try { return JSON.parse(localStorage.getItem(key)) || (key === KEYS.STAFF ? [] : {}); }
-  catch { return key === KEYS.STAFF ? [] : {}; }
-}
-function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
-let staffList = load(KEYS.STAFF);
-function saveStaff() { save(KEYS.STAFF, staffList); renderStaffList(); syncStaffToCloud(); }
-
-// ==================== SUPABASE ====================
-const SUPABASE_CONFIG_KEY = 'resto_supabase_config';
+const turnoverIds = [
+  'card-tips', 'extra-tips', 'total-turnover', 'card-machine', 'cash-amount',
+  'online-amount', 'receipt-amount', 'deposit-amount', 'phone-deposit', 'deliveroo-amount'
+];
+let selectedDate = todayStr();
+let adminDate = null;
+let morningRows = [{ name: '', hours: 0 }];
+let eveningRows = [{ name: '', hours: 0 }];
+let chartMode = 'week';
 let supabase = null;
 let supabaseAuthed = false;
 let supabaseReady = false;
+let supabaseSubscribed = false;
+let supabaseCreateClient = null;
 
+function $(id) { return document.getElementById(id); }
+function load(key) {
+  try {
+    const fallback = key === KEYS.staff ? [] : {};
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch {
+    return key === KEYS.staff ? [] : {};
+  }
+}
+function save(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+function num(value) {
+  const parsed = parseFloat(String(value || '').replace(/[£,]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function money(value) {
+  return '£' + num(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function plain(value) {
+  return num(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function trunc2(value) { return Math.floor(num(value) * 100) / 100; }
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function showToast(message) {
+  const t = $('toast');
+  t.textContent = message;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function setSyncStatus(message) {
+  const el = $('supabase-sync-indicator');
+  if (el) el.textContent = message;
+}
 function sanitizeSupabaseUrl(raw) {
-  // Strip /rest/v1/, /auth/v1/, trailing slashes, etc. — keep only the base origin
-  var cleaned = raw.trim().replace(/\/+$/, '');
-  // Remove any path after .co (like /rest/v1/callback)
-  var match = cleaned.match(/^(https?:\/\/[^\/]+\.supabase\.co)/);
-  if (match) { cleaned = match[1]; }
+  let cleaned = String(raw || '').trim().replace(/\/+$/, '');
+  const match = cleaned.match(/^(https?:\/\/[^\/]+\.supabase\.co)/);
+  if (match) cleaned = match[1];
   return cleaned;
 }
-
 function getSupabaseConfig() {
-  try { return JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || {}; }
-  catch { return {}; }
-}
-
-function saveSupabaseConfig() {
-  var rawUrl = document.getElementById('supabase-url').value.trim();
-  var url = sanitizeSupabaseUrl(rawUrl);
-  var key = document.getElementById('supabase-anon-key').value.trim();
-  var appUrl = document.getElementById('supabase-app-url').value.trim();
-
-  if (!url || !key) { toast('请填写 Project URL 和 Anon Key'); return; }
-
-  // Show the cleaned URL back to user so they know we fixed it
-  document.getElementById('supabase-url').value = url;
-
-  if (rawUrl !== url) {
-    toast('已自动修正 URL（移除多余路径）');
+  try {
+    const own = JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || null;
+    if (own?.url || own?.anonKey) return own;
+    const legacy = JSON.parse(localStorage.getItem('resto_supabase_config')) || {};
+    return legacy;
+  } catch {
+    return {};
   }
-
-  var config = { url: url, anonKey: key, appUrl: appUrl };
-  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(config));
-  document.getElementById('supabase-config-status').textContent = '✅ 已保存 (' + url + ')';
-  toast('配置已保存');
+}
+function saveSupabaseConfig() {
+  const rawUrl = $('supabase-url').value.trim();
+  const url = sanitizeSupabaseUrl(rawUrl);
+  const anonKey = $('supabase-anon-key').value.trim();
+  const appUrl = $('supabase-app-url').value.trim();
+  if (!url || !anonKey) {
+    showToast('请填写 Project URL 和 Anon Key');
+    return;
+  }
+  $('supabase-url').value = url;
+  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify({ url, anonKey, appUrl }));
+  $('supabase-config-status').textContent = '已保存 Supabase 配置：' + url;
+  showToast(rawUrl === url ? 'Supabase 配置已保存' : '已自动修正 URL 并保存');
   initSupabase();
 }
-
-var _supabaseCreateClient = null;
-
 async function loadSupabaseSDK() {
-  // Return cached createClient if already loaded
-  if (_supabaseCreateClient) return _supabaseCreateClient;
-
-  // Try CDN URLs in order: ESM (most reliable) first, then UMD fallbacks
-  var urls = [
+  if (supabaseCreateClient) return supabaseCreateClient;
+  const urls = [
     'https://esm.sh/@supabase/supabase-js@2.45.0',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js'
   ];
-
-  for (var i = 0; i < urls.length; i++) {
+  for (let i = 0; i < urls.length; i++) {
     try {
       if (i === 0) {
-        // ESM: use dynamic import
-        var mod = await import(urls[i]);
-        if (mod && mod.createClient) {
-          _supabaseCreateClient = mod.createClient;
-          return _supabaseCreateClient;
+        const mod = await import(urls[i]);
+        if (mod?.createClient) {
+          supabaseCreateClient = mod.createClient;
+          return supabaseCreateClient;
         }
       } else {
-        // UMD: use script tag
-        var result = await new Promise(function(resolve, reject) {
-          if (window.supabase && window.supabase.createClient) {
-            _supabaseCreateClient = window.supabase.createClient;
-            resolve(_supabaseCreateClient);
-            return;
-          }
-          var script = document.createElement('script');
+        const client = await new Promise((resolve, reject) => {
+          if (window.supabase?.createClient) return resolve(window.supabase.createClient);
+          const script = document.createElement('script');
           script.src = urls[i];
-          script.onload = function() {
-            if (window.supabase && window.supabase.createClient) {
-              _supabaseCreateClient = window.supabase.createClient;
-              resolve(_supabaseCreateClient);
-            } else {
-              reject(new Error('SDK loaded but createClient not found'));
-            }
-          };
-          script.onerror = function() { reject(new Error('Script load failed: ' + urls[i])); };
+          script.onload = () => window.supabase?.createClient ? resolve(window.supabase.createClient) : reject(new Error('SDK loaded but createClient not found'));
+          script.onerror = () => reject(new Error('Script load failed'));
           document.head.appendChild(script);
         });
-        if (result) return result;
+        supabaseCreateClient = client;
+        return client;
       }
-    } catch(e) {
-      console.warn('Supabase SDK URL ' + (i+1) + ' failed:', e.message);
+    } catch (err) {
+      console.warn('Supabase SDK load failed:', err);
     }
   }
-  throw new Error('All Supabase SDK URLs failed');
+  throw new Error('Supabase SDK 加载失败');
 }
-
 async function initSupabase() {
-  var config = getSupabaseConfig();
-  var indicator = document.getElementById('supabase-sync-indicator');
-  var loginBtn = document.getElementById('btn-github-login');
-  if (!indicator) return;
-
-  // Sanitize URL in case it was saved with bad formatting
-  if (config.url) { config.url = sanitizeSupabaseUrl(config.url); }
-
+  const config = getSupabaseConfig();
+  if ($('supabase-url')) {
+    $('supabase-url').value = config.url || '';
+    $('supabase-anon-key').value = config.anonKey || '';
+    $('supabase-app-url').value = config.appUrl || '';
+  }
+  const loginBtn = $('btn-github-login');
   if (!config.url || !config.anonKey) {
-    indicator.textContent = '⚠️ 未配置 Supabase，仅本地存储';
     supabaseReady = false;
     supabase = null;
-    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⚠️ 请先配置 Supabase'; }
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.textContent = '请先配置 Supabase';
+    }
+    setSyncStatus('未配置 Supabase，仅本地存储');
     return;
   }
-
-  if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⏳ 加载中...'; }
-  indicator.textContent = '🔄 正在加载 SDK...';
-
   try {
-    var createClient = await loadSupabaseSDK();
-
-    // Create the Supabase client with the CLEANED URL
-    supabase = createClient(config.url, config.anonKey, {
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.textContent = '加载中...';
+    }
+    setSyncStatus('正在加载 Supabase SDK...');
+    const createClient = await loadSupabaseSDK();
+    supabase = createClient(sanitizeSupabaseUrl(config.url), config.anonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
     supabaseReady = true;
-    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
-    indicator.textContent = '☁️ 已连接 ' + config.url;
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'GitHub 登录';
+    }
     await checkSupabaseSession();
-    subscribeToChanges();
-  } catch(e) {
-    console.error('Supabase init error:', e);
+    subscribeToCloudChanges();
+  } catch (err) {
     supabase = null;
     supabaseReady = false;
-    indicator.textContent = '⚠️ 连接失败: ' + (e.message || '未知错误');
-    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '❌ 连接失败'; }
-    toast('初始化失败: ' + (e.message || ''));
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.textContent = '连接失败';
+    }
+    setSyncStatus('Supabase 连接失败：' + (err.message || '未知错误'));
   }
 }
-
 async function checkSupabaseSession() {
   if (!supabase) return;
+  const login = $('btn-github-login');
+  const logout = $('btn-github-logout');
+  const status = $('supabase-login-status');
   try {
     const { data } = await supabase.auth.getSession();
     if (data.session) {
       supabaseAuthed = true;
-      document.getElementById('supabase-login-status').innerHTML = '<span style="color:#15803D;">✅ 已登录: ' + (data.session.user.email || data.session.user.user_metadata?.user_name || 'GitHub') + '</span>';
-      document.getElementById('btn-github-login').style.display = 'none';
-      document.getElementById('btn-github-logout').style.display = '';
-      document.getElementById('supabase-sync-indicator').textContent = '☁️ 已连接 Supabase · 实时同步中';
-      loadFromCloud(); // Pull latest data
+      const name = data.session.user.email || data.session.user.user_metadata?.user_name || 'GitHub';
+      if (status) status.innerHTML = '<span style="color:#15803D;">已登录：' + escapeHtml(name) + '</span>';
+      if (login) login.style.display = 'none';
+      if (logout) logout.style.display = '';
+      setSyncStatus('已连接 Supabase，实时同步中');
+      await loadFromCloud();
+      await pushLocalToCloud();
     } else {
       supabaseAuthed = false;
-      document.getElementById('supabase-login-status').innerHTML = '<span style="color:#F59E0B;">⚠️ 未登录，请点击 GitHub 登录</span>';
-      document.getElementById('btn-github-login').style.display = '';
-      document.getElementById('btn-github-logout').style.display = 'none';
-      document.getElementById('supabase-sync-indicator').textContent = '⚠️ 未登录，仅本地存储';
+      if (status) status.innerHTML = '<span style="color:#D97706;">未登录，请点击 GitHub 登录</span>';
+      if (login) login.style.display = '';
+      if (logout) logout.style.display = 'none';
+      setSyncStatus('Supabase 已配置，未登录，仅本地存储');
     }
-  } catch(e) {
-    document.getElementById('supabase-sync-indicator').textContent = '❌ 连接出错';
-    console.error(e);
+  } catch (err) {
+    setSyncStatus('检查登录状态失败');
   }
 }
-
 function getRedirectUrl() {
-  // Auto-detect: use the actual page URL if served via HTTP(S)
   if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
     return window.location.origin + window.location.pathname;
   }
-  // file:// protocol — must use the user-configured page URL
-  var config = getSupabaseConfig();
-  if (config.appUrl) {
-    return config.appUrl.replace(/\/+$/, '') + '/index.html';
-  }
+  const config = getSupabaseConfig();
+  if (config.appUrl) return config.appUrl.replace(/\/+$/, '') + '/index.html';
   return null;
 }
-
 async function supabaseLogin() {
-  if (!supabase || !supabaseReady) { toast('Supabase 尚未就绪，请等待连接或检查配置'); return; }
-
-  var redirectUrl = getRedirectUrl();
-  if (!redirectUrl) {
-    toast('❌ 检测到本地文件打开。请将页面部署到 Web 服务器（如 GitHub Pages），并在下方填写应用网址后重试。');
+  if (!supabase || !supabaseReady) {
+    showToast('Supabase 尚未就绪，请先保存配置');
     return;
   }
-
-  var loginBtn = document.getElementById('btn-github-login');
-  if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = '⏳ 正在跳转 GitHub...'; }
-
-  try {
-    var { error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: { redirectTo: redirectUrl }
-    });
-    if (error) {
-      toast('登录失败: ' + error.message);
-      if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
+  const redirectTo = getRedirectUrl();
+  if (!redirectTo) {
+    showToast('本地文件打开时请先填写页面地址');
+    return;
+  }
+  const btn = $('btn-github-login');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '正在跳转 GitHub...';
+  }
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'github',
+    options: { redirectTo }
+  });
+  if (error) {
+    showToast('登录失败：' + error.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'GitHub 登录';
     }
-  } catch(e) {
-    console.error('Login error:', e);
-    toast('登录出错: ' + (e.message || '未知错误'));
-    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = '🔐 GitHub 登录'; }
   }
 }
-
 async function supabaseLogout() {
   if (!supabase) return;
   await supabase.auth.signOut();
   supabaseAuthed = false;
-  document.getElementById('supabase-login-status').innerHTML = '<span style="color:#F59E0B;">⚠️ 已退出登录</span>';
-  document.getElementById('btn-github-login').style.display = '';
-  document.getElementById('btn-github-logout').style.display = 'none';
-  document.getElementById('supabase-sync-indicator').textContent = '⚠️ 未登录，仅本地存储';
-  toast('已退出登录');
+  const login = $('btn-github-login');
+  const logout = $('btn-github-logout');
+  if (login) login.style.display = '';
+  if (logout) logout.style.display = 'none';
+  if ($('supabase-login-status')) $('supabase-login-status').textContent = '已退出登录';
+  setSyncStatus('已退出登录，仅本地存储');
 }
-
-function syncTurnoverToCloud(date, data) {
+function syncRecordToCloud(date, data) {
   if (!supabase || !supabaseAuthed) return;
-  try {
-    supabase.from('turnover_records').upsert({ date: date, data: data, updated_at: new Date().toISOString() }, { onConflict: 'date' }).then(function(){}).catch(function(){});
-  } catch(e) { /* ignore */ }
+  const row = { date, data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() }, updated_at: new Date().toISOString() };
+  supabase.from(CLOUD_TABLES.records).upsert(row, { onConflict: 'date' }).then(() => setSyncStatus('营业额已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('营业额同步失败：' + err.message));
 }
-
-function syncTipsToCloud(date, data) {
+function syncTipToCloud(date, data) {
   if (!supabase || !supabaseAuthed) return;
-  try {
-    supabase.from('tip_records').upsert({ date: date, data: data, updated_at: new Date().toISOString() }, { onConflict: 'date' }).then(function(){}).catch(function(){});
-  } catch(e) { /* ignore */ }
+  const row = { date, data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() }, updated_at: new Date().toISOString() };
+  supabase.from(CLOUD_TABLES.tips).upsert(row, { onConflict: 'date' }).then(() => setSyncStatus('小费已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('小费同步失败：' + err.message));
 }
-
-async function syncStaffToCloud() {
+function syncStaffToCloud() {
   if (!supabase || !supabaseAuthed) return;
-  try {
-    supabase.from('staff_list').upsert({ id: 1, names: staffList, updated_at: new Date().toISOString() }).then(function(){}).catch(function(){});
-  } catch(e) { /* ignore */ }
+  supabase.from(CLOUD_TABLES.staff).upsert({ id: 1, names: getStaffList(), updated_at: new Date().toISOString() }).then(() => setSyncStatus('员工名单已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('员工同步失败：' + err.message));
 }
-
 async function loadFromCloud() {
   if (!supabase || !supabaseAuthed) return;
   try {
-    // Pull turnover records
-    const { data: tData, error: tErr } = await supabase.from('turnover_records').select('date,data');
-    if (!tErr && tData) {
-      const records = load(KEYS.RECORDS);
-      let updated = false;
-      tData.forEach(row => {
-        if (!records[row.date] || new Date(row.data.updated_at||0) > new Date(records[row.date].updated_at||0)) {
-          records[row.date] = row.data;
-          updated = true;
-        }
-      });
-      if (updated) save(KEYS.RECORDS, records);
-    }
+    const records = load(KEYS.records);
+    const tips = load(KEYS.tips);
+    const { data: recordRows, error: recordError } = await supabase.from(CLOUD_TABLES.records).select('date,data,updated_at');
+    if (recordError) throw recordError;
+    (recordRows || []).forEach(row => {
+      const cloudUpdated = new Date(row.data?.updatedAt || row.updated_at || 0);
+      const localUpdated = new Date(records[row.date]?.updatedAt || 0);
+      if (!records[row.date] || cloudUpdated > localUpdated) records[row.date] = { ...row.data, date: row.date };
+    });
+    const { data: tipRows, error: tipError } = await supabase.from(CLOUD_TABLES.tips).select('date,data,updated_at');
+    if (tipError) throw tipError;
+    (tipRows || []).forEach(row => {
+      const cloudUpdated = new Date(row.data?.updatedAt || row.updated_at || 0);
+      const localUpdated = new Date(tips[row.date]?.updatedAt || 0);
+      if (!tips[row.date] || cloudUpdated > localUpdated) tips[row.date] = { ...row.data, date: row.date };
+    });
+    const { data: staffRow } = await supabase.from(CLOUD_TABLES.staff).select('names').eq('id', 1).maybeSingle();
+    if (staffRow?.names && Array.isArray(staffRow.names)) save(KEYS.staff, staffRow.names);
+    save(KEYS.records, records);
+    save(KEYS.tips, tips);
+    loadSelectedDate();
+    refreshAdmin();
+    setSyncStatus('已从云端拉取数据 ' + new Date().toLocaleTimeString());
+  } catch (err) {
+    setSyncStatus('云端拉取失败：' + (err.message || '未知错误'));
+  }
+}
+async function pushLocalToCloud() {
+  if (!supabase || !supabaseAuthed) return;
+  try {
+    const records = load(KEYS.records);
+    const tips = load(KEYS.tips);
+    const staff = getStaffList();
+    const recordRows = Object.entries(records).map(([date, data]) => ({
+      date,
+      data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() },
+      updated_at: new Date().toISOString()
+    }));
+    const tipRows = Object.entries(tips).map(([date, data]) => ({
+      date,
+      data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() },
+      updated_at: new Date().toISOString()
+    }));
+    if (recordRows.length) await supabase.from(CLOUD_TABLES.records).upsert(recordRows, { onConflict: 'date' });
+    if (tipRows.length) await supabase.from(CLOUD_TABLES.tips).upsert(tipRows, { onConflict: 'date' });
+    await supabase.from(CLOUD_TABLES.staff).upsert({ id: 1, names: staff, updated_at: new Date().toISOString() });
+    setSyncStatus('本地数据已补同步到云端 ' + new Date().toLocaleTimeString());
+  } catch (err) {
+    setSyncStatus('本地数据上传云端失败：' + (err.message || '未知错误'));
+  }
+}
+function subscribeToCloudChanges() {
+  if (!supabase || supabaseSubscribed) return;
+  supabaseSubscribed = true;
+  supabase.channel('resto-v2-cloud')
+    .on('postgres_changes', { event: '*', schema: 'public', table: CLOUD_TABLES.records }, payload => {
+      if (payload.new?.date) {
+        const records = load(KEYS.records);
+        records[payload.new.date] = { ...payload.new.data, date: payload.new.date };
+        save(KEYS.records, records);
+        loadSelectedDate();
+        refreshAdmin();
+      }
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: CLOUD_TABLES.tips }, payload => {
+      if (payload.new?.date) {
+        const tips = load(KEYS.tips);
+        tips[payload.new.date] = { ...payload.new.data, date: payload.new.date };
+        save(KEYS.tips, tips);
+        loadTipsForDate();
+        refreshAdmin();
+      }
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: CLOUD_TABLES.staff }, payload => {
+      if (payload.new?.names) {
+        save(KEYS.staff, payload.new.names);
+        renderStaffRows('morning');
+        renderStaffRows('evening');
+        renderStaffTable();
+      }
+    })
+    .subscribe();
+}
+function dateAdd(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+function monthAdd(dateStr, months) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split('T')[0];
+}
+function getWeekRange(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay() || 7;
+  const from = new Date(d);
+  from.setDate(d.getDate() - day + 1);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 6);
+  return { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0] };
+}
+function monthRange(dateStr) {
+  const m = dateStr.slice(0, 7);
+  const first = m + '-01';
+  const d = new Date(first + 'T00:00:00');
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(0);
+  return { from: first, to: d.toISOString().split('T')[0] };
+}
 
-    // Pull tip records
-    const { data: tipData, error: tipErr } = await supabase.from('tip_records').select('date,data');
-    if (!tipErr && tipData) {
-      const tips = load(KEYS.TIPS);
-      let updated = false;
-      tipData.forEach(row => {
-        if (!tips[row.date] || new Date(row.data.updated_at||0) > new Date(tips[row.date].updated_at||0)) {
-          tips[row.date] = row.data;
-          updated = true;
-        }
-      });
-      if (updated) save(KEYS.TIPS, tips);
-    }
+function calcTurnoverFromData(d) {
+  const cardTips = num(d.cardTips);
+  const extraTips = num(d.extraTips);
+  const totalCardTips = cardTips + extraTips;
+  const zReport = num(d.totalTurnover) - cardTips;
+  const cardAmount = num(d.cardMachineIncome) - totalCardTips;
+  const oneTotal = cardAmount + num(d.cashAmount) + num(d.onlineAmount) + num(d.receiptAmount);
+  const diff = oneTotal - zReport;
+  const grandTotal = oneTotal + num(d.depositAmount) + num(d.phoneDepositAmount) + num(d.deliverooAmount);
+  return { totalCardTips, zReport, cardAmount, oneTotal, diff, grandTotal };
+}
+function getTurnoverFormData() {
+  const d = {
+    date: selectedDate,
+    cardTips: num($('card-tips').value),
+    extraTips: num($('extra-tips').value),
+    totalTurnover: num($('total-turnover').value),
+    cardMachineIncome: num($('card-machine').value),
+    cashAmount: num($('cash-amount').value),
+    onlineAmount: num($('online-amount').value),
+    receiptAmount: num($('receipt-amount').value),
+    depositAmount: num($('deposit-amount').value),
+    phoneDepositAmount: num($('phone-deposit').value),
+    deliverooAmount: num($('deliveroo-amount').value)
+  };
+  return { ...d, ...calcTurnoverFromData(d) };
+}
+function setTurnoverForm(d) {
+  $('card-tips').value = d?.cardTips || '';
+  $('extra-tips').value = d?.extraTips || '';
+  $('total-turnover').value = d?.totalTurnover || '';
+  $('card-machine').value = d?.cardMachineIncome || '';
+  $('cash-amount').value = d?.cashAmount ?? '0';
+  $('online-amount').value = d?.onlineAmount || '';
+  $('receipt-amount').value = d?.receiptAmount || '';
+  $('deposit-amount').value = d?.depositAmount || '';
+  $('phone-deposit').value = d?.phoneDepositAmount || '';
+  $('deliveroo-amount').value = d?.deliverooAmount || '';
+  calcTurnover();
+}
+function calcTurnover() {
+  const data = getTurnoverFormData();
+  $('total-card-tips').value = money(data.totalCardTips);
+  $('z-report').value = money(data.zReport);
+  $('card-amount').value = money(data.cardAmount);
+  $('one-total').value = money(data.oneTotal);
+  $('turnover-diff').value = (data.diff >= 0 ? '+' : '') + money(data.diff);
+  $('grand-total-text').textContent = money(data.grandTotal);
+  const diffEl = $('turnover-diff');
+  diffEl.style.background = Math.abs(data.diff) < 0.005 ? 'var(--green-50)' : 'var(--red-50)';
+  diffEl.style.borderColor = Math.abs(data.diff) < 0.005 ? '#86efac' : '#fecaca';
+}
+function setTurnoverLocked(locked) {
+  const panel = $('turnover-lock-panel');
+  turnoverIds.forEach(id => $(id).disabled = locked);
+  $('btn-submit-turnover').disabled = locked;
+  panel.classList.toggle('locked', locked);
+  $('turnover-state').textContent = locked ? '已提交，员工模式已锁定' : '新记录，可提交';
+  $('turnover-status').textContent = locked ? '这一天已经提交。只有管理员可在后台查看和修改。' : '';
+}
+function loadSelectedDate() {
+  selectedDate = $('current-date').value || todayStr();
+  const records = load(KEYS.records);
+  const record = records[selectedDate];
+  setTurnoverForm(record || null);
+  setTurnoverLocked(!!record);
+  loadTipsForDate();
+  if (isAdmin()) refreshAdmin();
+}
+function submitTurnover() {
+  const records = load(KEYS.records);
+  if (records[selectedDate]) {
+    showToast('这一天已提交，只有管理员可修改');
+    return;
+  }
+  const data = getTurnoverFormData();
+  data.createdAt = new Date().toISOString();
+  data.updatedAt = data.createdAt;
+  records[selectedDate] = data;
+  save(KEYS.records, records);
+  syncRecordToCloud(selectedDate, data);
+  showToast('营业额已提交');
+  setTurnoverLocked(true);
+  loadTipsForDate();
+  refreshAdmin();
+}
 
-    // Pull staff
-    const { data: sData, error: sErr } = await supabase.from('staff_list').select('names').eq('id', 1).single();
-    if (!sErr && sData && sData.names) {
-      let updated = false;
-      sData.names.forEach(n => { if (!staffList.includes(n)) { staffList.push(n); updated = true; } });
-      if (updated) saveStaff();
-    }
+function currentTurnoverTips() {
+  const records = load(KEYS.records);
+  return records[selectedDate]?.totalCardTips || 0;
+}
+function loadTipsForDate() {
+  const tips = load(KEYS.tips);
+  const t = tips[selectedDate] || {};
+  $('tip-total-card').value = money(currentTurnoverTips());
+  $('tip-total-cash').value = t.totalDailyCashTip || '';
+  $('morning-card-tip').value = t.morningCardTip || '';
+  $('morning-cash-tip').value = t.morningCashTip || '';
+  morningRows = normalizeStaffRows(t.morningStaff);
+  eveningRows = normalizeStaffRows(t.eveningStaff);
+  renderStaffRows('morning');
+  renderStaffRows('evening');
+  calcTips();
+  $('tips-status').textContent = tips[selectedDate] ? '已载入 ' + selectedDate + ' 的小费记录。' : '';
+}
+function normalizeStaffRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [{ name: '', hours: 0 }];
+  return rows.map(r => ({ name: r.name || '', hours: num(r.hours) }));
+}
+function getStaffList() { return load(KEYS.staff); }
+function renderStaffRows(period) {
+  const list = getStaffList();
+  const rows = period === 'morning' ? morningRows : eveningRows;
+  const target = $(period + '-staff-rows');
+  target.innerHTML = rows.map((row, idx) => {
+    const options = ['<option value="">-- 选择员工 --</option>'].concat(
+      list.map(name => '<option value="' + escapeAttr(name) + '"' + (name === row.name ? ' selected' : '') + '>' + escapeHtml(name) + '</option>')
+    ).join('');
+    return '<div class="staff-row">' +
+      '<div class="field"><label>员工</label><select data-period="' + period + '" data-idx="' + idx + '" data-field="name">' + options + '</select></div>' +
+      '<div class="field"><label>工时</label><input type="number" step="0.25" value="' + (row.hours || '') + '" data-period="' + period + '" data-idx="' + idx + '" data-field="hours"></div>' +
+      '<div class="staff-amount" id="' + period + '-amount-' + idx + '">Card: £0.00 Cash: £0.00</div>' +
+      '<button class="btn danger mini remove-btn" data-remove-period="' + period + '" data-remove-idx="' + idx + '">删除</button>' +
+    '</div>';
+  }).join('');
+}
+function calcTipsFromData(t, totalCardTips) {
+  const totalCard = num(totalCardTips);
+  const totalCash = num(t.totalDailyCashTip);
+  const morningCard = num(t.morningCardTip);
+  const morningCash = num(t.morningCashTip);
+  const eveningCard = Math.max(0, totalCard - morningCard);
+  const eveningCash = Math.max(0, totalCash - morningCash);
+  const mKitchenCard = trunc2(morningCard * 0.5);
+  const mKitchenCash = trunc2(morningCash * 0.5);
+  const eKitchenCard = trunc2(eveningCard * 0.5);
+  const eKitchenCash = trunc2(eveningCash * 0.5);
+  return {
+    totalCard, totalCash, morningCard, morningCash, eveningCard, eveningCash,
+    mKitchenCard, mKitchenCash,
+    mFloorCard: morningCard - mKitchenCard,
+    mFloorCash: morningCash - mKitchenCash,
+    eKitchenCard, eKitchenCash,
+    eFloorCard: eveningCard - eKitchenCard,
+    eFloorCash: eveningCash - eKitchenCash
+  };
+}
+function collectRows(period) {
+  return Array.from(document.querySelectorAll('[data-period="' + period + '"][data-field="name"]')).map((select, idx) => {
+    const hours = document.querySelector('[data-period="' + period + '"][data-field="hours"][data-idx="' + idx + '"]');
+    return { name: select.value, hours: num(hours?.value) };
+  });
+}
+function distribute(rows, cardPool, cashPool) {
+  const totalHours = rows.reduce((sum, row) => sum + num(row.hours), 0);
+  const cleaned = rows.map(row => ({ ...row, cardAmount: 0, cashAmount: 0 }));
+  if (cleaned.length === 1 && totalHours === 0) {
+    cleaned[0].cardAmount = trunc2(cardPool);
+    cleaned[0].cashAmount = trunc2(cashPool);
+    return cleaned;
+  }
+  if (totalHours <= 0) return cleaned;
+  let cardAssigned = 0;
+  let cashAssigned = 0;
+  cleaned.forEach((row, idx) => {
+    const isLast = idx === cleaned.length - 1;
+    row.cardAmount = isLast ? trunc2(cardPool - cardAssigned) : trunc2(cardPool * num(row.hours) / totalHours);
+    row.cashAmount = isLast ? trunc2(cashPool - cashAssigned) : trunc2(cashPool * num(row.hours) / totalHours);
+    cardAssigned += row.cardAmount;
+    cashAssigned += row.cashAmount;
+  });
+  return cleaned;
+}
+function getTipFormData() {
+  const records = load(KEYS.records);
+  const totalCardTips = records[selectedDate]?.totalCardTips || 0;
+  const base = {
+    date: selectedDate,
+    totalDailyCardTip: totalCardTips,
+    totalDailyCashTip: num($('tip-total-cash').value),
+    morningCardTip: num($('morning-card-tip').value),
+    morningCashTip: num($('morning-cash-tip').value)
+  };
+  const pools = calcTipsFromData(base, totalCardTips);
+  const morning = distribute(collectRows('morning'), pools.mFloorCard, pools.mFloorCash);
+  const evening = distribute(collectRows('evening'), pools.eFloorCard, pools.eFloorCash);
+  return { ...base, ...pools, morningStaff: morning, eveningStaff: evening };
+}
+function calcTips() {
+  $('tip-total-card').value = money(currentTurnoverTips());
+  const t = getTipFormData();
+  $('m-k-card').textContent = money(t.mKitchenCard);
+  $('m-k-cash').textContent = money(t.mKitchenCash);
+  $('m-f-card').textContent = money(t.mFloorCard);
+  $('m-f-cash').textContent = money(t.mFloorCash);
+  $('e-k-card').textContent = money(t.eKitchenCard);
+  $('e-k-cash').textContent = money(t.eKitchenCash);
+  $('e-f-card').textContent = money(t.eFloorCard);
+  $('e-f-cash').textContent = money(t.eFloorCash);
+  $('tips-state').textContent = currentTurnoverTips() ? 'Total card tips 已锁定' : '请先提交每日营业额';
+  [...t.morningStaff].forEach((r, i) => {
+    const el = $('morning-amount-' + i);
+    if (el) el.textContent = 'Card: ' + money(r.cardAmount) + ' Cash: ' + money(r.cashAmount);
+  });
+  [...t.eveningStaff].forEach((r, i) => {
+    const el = $('evening-amount-' + i);
+    if (el) el.textContent = 'Card: ' + money(r.cardAmount) + ' Cash: ' + money(r.cashAmount);
+  });
+}
+function saveTips() {
+  if (!load(KEYS.records)[selectedDate]) {
+    showToast('请先提交这一天的每日营业额');
+    return;
+  }
+  const data = getTipFormData();
+  if (!validateTipStaff(data)) return;
+  data.updatedAt = new Date().toISOString();
+  const tips = load(KEYS.tips);
+  tips[selectedDate] = data;
+  save(KEYS.tips, tips);
+  syncTipToCloud(selectedDate, data);
+  showToast('小费计算已保存');
+  $('tips-status').textContent = '已保存 ' + selectedDate;
+  refreshAdmin();
+}
+function validateTipStaff(data) {
+  const morningNeedsName = (data.mFloorCard > 0.004 || data.mFloorCash > 0.004) && !data.morningStaff.some(s => s.name);
+  const eveningNeedsName = (data.eFloorCard > 0.004 || data.eFloorCash > 0.004) && !data.eveningStaff.some(s => s.name);
+  if (morningNeedsName) {
+    showToast('上午 Floor 有小费，请先选择员工');
+    return false;
+  }
+  if (eveningNeedsName) {
+    showToast('下午 Floor 有小费，请先选择员工');
+    return false;
+  }
+  return true;
+}
 
-    document.getElementById('supabase-sync-indicator').textContent = '☁️ 已连接 Supabase · 实时同步中';
-  } catch(e) {
-    console.error('Load from cloud error:', e);
+function isAdmin() { return sessionStorage.getItem(KEYS.admin) === '1'; }
+function showAdminDashboard(show) {
+  $('admin-login').style.display = show ? 'none' : '';
+  $('admin-dashboard').style.display = show ? '' : 'none';
+  if (show) refreshAdmin();
+}
+function adminLogin() {
+  if ($('admin-password').value === ADMIN_PASSWORD) {
+    sessionStorage.setItem(KEYS.admin, '1');
+    $('admin-password').value = '';
+    showAdminDashboard(true);
+    showToast('已进入管理员后台');
+  } else {
+    $('admin-login-status').textContent = '密码错误';
+  }
+}
+function adminLogout() {
+  sessionStorage.removeItem(KEYS.admin);
+  showAdminDashboard(false);
+}
+function refreshAdmin() {
+  if (!isAdmin()) return;
+  const records = load(KEYS.records);
+  const dates = Object.keys(records).sort().reverse();
+  const week = getWeekRange(todayStr());
+  const month = todayStr().slice(0, 7);
+  $('stat-today').textContent = money(records[todayStr()]?.grandTotal || 0);
+  $('stat-week').textContent = money(sumRange(week.from, week.to));
+  $('stat-month').textContent = money(dates.filter(d => d.startsWith(month)).reduce((sum, d) => sum + num(records[d].grandTotal), 0));
+  $('stat-days').textContent = dates.length;
+  $('history-body').innerHTML = dates.map(date => {
+    const r = records[date];
+    return '<tr>' +
+      '<td><b>' + date + '</b></td>' +
+      '<td>' + money(r.grandTotal) + '</td>' +
+      '<td>' + money(r.totalCardTips) + '</td>' +
+      '<td>' + (r.diff >= 0 ? '+' : '') + money(r.diff) + '</td>' +
+      '<td><button class="btn outline mini" data-detail-date="' + date + '">查看/修改</button> <button class="btn good mini" data-export-day="' + date + '">导出</button></td>' +
+    '</tr>';
+  }).join('');
+  renderStaffTable();
+  drawChart(chartMode);
+  const mr = monthRange(todayStr());
+  $('export-from').value = mr.from;
+  $('export-to').value = todayStr();
+}
+function sumRange(from, to) {
+  const records = load(KEYS.records);
+  return Object.keys(records).filter(d => d >= from && d <= to).reduce((sum, d) => sum + num(records[d].grandTotal), 0);
+}
+function openDetail(date) {
+  adminDate = date;
+  const records = load(KEYS.records);
+  const tips = load(KEYS.tips);
+  const r = records[date];
+  $('admin-detail').style.display = '';
+  $('detail-title').textContent = date + ' 历史详情';
+  $('admin-turnover-grid').innerHTML = adminFields([
+    ['cardTips', 'Card tips'], ['extraTips', 'Extra tips'], ['totalTurnover', 'Total 今日总营业额'],
+    ['cardMachineIncome', '卡机今日收入'], ['cashAmount', 'Cash'], ['onlineAmount', 'Online'],
+    ['receiptAmount', 'Receipt'], ['depositAmount', 'Deposit'], ['phoneDepositAmount', 'Phone Deposit'],
+    ['deliverooAmount', 'Deliveroo']
+  ], r, 'turnover');
+  const t = tips[date] || {};
+  $('admin-tip-grid').innerHTML = adminFields([
+    ['totalDailyCashTip', '全天 Cash 小费'], ['morningCardTip', '上午 Card 小费'], ['morningCashTip', '上午 Cash 小费']
+  ], t, 'tip') + '<div class="field"><label>Total card tips</label><input readonly value="' + money(r.totalCardTips) + '"></div>';
+  $('admin-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function adminFields(fields, data, prefix) {
+  return fields.map(([key, label]) => '<div class="field"><label>' + label + '</label><input type="number" step="0.01" data-admin-' + prefix + '="' + key + '" value="' + (data?.[key] ?? '') + '"></div>').join('');
+}
+function saveAdminTurnover() {
+  if (!adminDate) return;
+  const records = load(KEYS.records);
+  const old = records[adminDate] || { date: adminDate };
+  document.querySelectorAll('[data-admin-turnover]').forEach(input => {
+    old[input.dataset.adminTurnover] = num(input.value);
+  });
+  const updated = { ...old, date: adminDate, ...calcTurnoverFromData(old), updatedAt: new Date().toISOString() };
+  records[adminDate] = updated;
+  save(KEYS.records, records);
+  syncRecordToCloud(adminDate, updated);
+  recomputeSavedTipForDate(adminDate);
+  if (adminDate === selectedDate) loadSelectedDate();
+  refreshAdmin();
+  openDetail(adminDate);
+  showToast('营业额修改已保存');
+}
+function recomputeSavedTipForDate(date) {
+  const records = load(KEYS.records);
+  const tips = load(KEYS.tips);
+  if (!records[date] || !tips[date]) return;
+  const existing = tips[date];
+  const base = {
+    ...existing,
+    totalDailyCardTip: records[date].totalCardTips
+  };
+  const pools = calcTipsFromData(base, records[date].totalCardTips);
+  tips[date] = {
+    ...base,
+    ...pools,
+    morningStaff: distribute(normalizeStaffRows(existing.morningStaff), pools.mFloorCard, pools.mFloorCash),
+    eveningStaff: distribute(normalizeStaffRows(existing.eveningStaff), pools.eFloorCard, pools.eFloorCash),
+    updatedAt: new Date().toISOString()
+  };
+  save(KEYS.tips, tips);
+  syncTipToCloud(date, tips[date]);
+}
+function saveAdminTips() {
+  if (!adminDate) return;
+  const records = load(KEYS.records);
+  if (!records[adminDate]) return;
+  const tips = load(KEYS.tips);
+  const old = tips[adminDate] || { date: adminDate };
+  document.querySelectorAll('[data-admin-tip]').forEach(input => {
+    old[input.dataset.adminTip] = num(input.value);
+  });
+  const pools = calcTipsFromData(old, records[adminDate].totalCardTips);
+  tips[adminDate] = {
+    ...old,
+    date: adminDate,
+    totalDailyCardTip: records[adminDate].totalCardTips,
+    ...pools,
+    morningStaff: distribute(normalizeStaffRows(old.morningStaff), pools.mFloorCard, pools.mFloorCash),
+    eveningStaff: distribute(normalizeStaffRows(old.eveningStaff), pools.eFloorCard, pools.eFloorCash),
+    updatedAt: new Date().toISOString()
+  };
+  save(KEYS.tips, tips);
+  syncTipToCloud(adminDate, tips[adminDate]);
+  if (adminDate === selectedDate) loadTipsForDate();
+  refreshAdmin();
+  openDetail(adminDate);
+  showToast('小费修改已保存');
+}
+
+function renderStaffTable() {
+  const list = getStaffList();
+  $('staff-body').innerHTML = list.length ? list.map((name, idx) => '<tr><td>' + escapeHtml(name) + '</td><td><button class="btn danger mini" data-delete-staff="' + idx + '">删除</button></td></tr>').join('') : '<tr><td colspan="2">暂无员工</td></tr>';
+}
+function addStaff() {
+  const name = $('new-staff-name').value.trim();
+  if (!name) return showToast('请输入员工姓名');
+  const list = getStaffList();
+  if (list.includes(name)) return showToast('员工已存在');
+  list.push(name);
+  save(KEYS.staff, list);
+  syncStaffToCloud();
+  $('new-staff-name').value = '';
+  renderStaffRows('morning');
+  renderStaffRows('evening');
+  renderStaffTable();
+}
+function deleteStaff(idx) {
+  const list = getStaffList();
+  list.splice(idx, 1);
+  save(KEYS.staff, list);
+  syncStaffToCloud();
+  renderStaffRows('morning');
+  renderStaffRows('evening');
+  renderStaffTable();
+}
+
+function exportWorkbook(from, to) {
+  const records = load(KEYS.records);
+  const tips = load(KEYS.tips);
+  const dates = Object.keys(records).filter(d => d >= from && d <= to).sort();
+  if (!dates.length) return showToast('该范围内没有营业额数据');
+  if (!window.XLSX) return showToast('导出库未加载，请联网后重试');
+  const wb = XLSX.utils.book_new();
+  const turnoverRows = [[
+    '日期', 'Card tips', 'Extra tips', 'Total card tips', 'Total总营业额', 'Z Report',
+    '卡机收入', 'Card金额', 'Cash', 'Online', 'Receipt', '1Total', '差额',
+    'Deposit', 'Phone Deposit', 'Deliveroo', 'Grand Total'
+  ]];
+  dates.forEach(date => {
+    const r = records[date];
+    turnoverRows.push([
+      date, r.cardTips || 0, r.extraTips || 0, r.totalCardTips || 0, r.totalTurnover || 0,
+      r.zReport || 0, r.cardMachineIncome || 0, r.cardAmount || 0, r.cashAmount || 0,
+      r.onlineAmount || 0, r.receiptAmount || 0, r.oneTotal || 0, r.diff || 0,
+      r.depositAmount || 0, r.phoneDepositAmount || 0, r.deliverooAmount || 0, r.grandTotal || 0
+    ]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(turnoverRows);
+  ws1['!cols'] = turnoverRows[0].map(() => ({ wch: 15 }));
+  XLSX.utils.book_append_sheet(wb, ws1, '每日营业额');
+
+  const people = collectTipPeople(dates, tips);
+  appendTipSheet(wb, dates, tips, people, 'card', 'Card小费明细');
+  appendTipSheet(wb, dates, tips, people, 'cash', 'Cash小费明细');
+
+  const sumRows = [['项目', '金额']];
+  const totals = dates.reduce((acc, date) => {
+    const r = records[date];
+    acc.turnover += num(r.totalTurnover);
+    acc.tips += num(r.totalCardTips);
+    acc.card += num(r.cardAmount);
+    acc.cash += num(r.cashAmount);
+    acc.online += num(r.onlineAmount);
+    acc.receipt += num(r.receiptAmount);
+    acc.deposit += num(r.depositAmount);
+    acc.phone += num(r.phoneDepositAmount);
+    acc.deliveroo += num(r.deliverooAmount);
+    acc.grand += num(r.grandTotal);
+    return acc;
+  }, { turnover: 0, tips: 0, card: 0, cash: 0, online: 0, receipt: 0, deposit: 0, phone: 0, deliveroo: 0, grand: 0 });
+  sumRows.push(['范围', from + ' ~ ' + to], ['总营业额Total', totals.turnover], ['总Card tips', totals.tips], ['总Card', totals.card], ['总Cash', totals.cash], ['总Online', totals.online], ['总Receipt', totals.receipt], ['总Deposit', totals.deposit], ['总Phone Deposit', totals.phone], ['总Deliveroo', totals.deliveroo], ['Grand Total', totals.grand]);
+  const ws4 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws4['!cols'] = [{ wch: 24 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws4, '营业额汇总');
+  XLSX.writeFile(wb, '餐厅报表_' + from + '_' + to + '.xlsx');
+}
+function collectTipPeople(dates, tips) {
+  const set = new Set(['厨房']);
+  dates.forEach(date => {
+    const t = tips[date];
+    if (!t) return;
+    (t.morningStaff || []).forEach(s => s.name && set.add(s.name));
+    (t.eveningStaff || []).forEach(s => s.name && set.add(s.name));
+  });
+  return ['厨房'].concat(Array.from(set).filter(n => n !== '厨房').sort());
+}
+function appendTipSheet(wb, dates, tips, people, kind, sheetName) {
+  const rows = [['日期'].concat(people.map(p => p + ' (' + (kind === 'card' ? 'Card' : 'Cash') + ')'), [kind === 'card' ? 'Card合计' : 'Cash合计']).flat()];
+  const totals = Object.fromEntries(people.map(p => [p, 0]));
+  dates.forEach(date => {
+    const t = tips[date];
+    if (!t) return;
+    const values = Object.fromEntries(people.map(p => [p, 0]));
+    values['厨房'] = kind === 'card' ? num(t.mKitchenCard) + num(t.eKitchenCard) : num(t.mKitchenCash) + num(t.eKitchenCash);
+    (t.morningStaff || []).concat(t.eveningStaff || []).forEach(s => {
+      if (!s.name) return;
+      values[s.name] = (values[s.name] || 0) + (kind === 'card' ? num(s.cardAmount) : num(s.cashAmount));
+    });
+    let rowTotal = 0;
+    const row = [date].concat(people.map(p => {
+      rowTotal += values[p] || 0;
+      totals[p] += values[p] || 0;
+      return values[p] || 0;
+    }), [rowTotal]);
+    rows.push(row.flat());
+  });
+  let grand = 0;
+  rows.push(['合计'].concat(people.map(p => {
+    grand += totals[p] || 0;
+    return totals[p] || 0;
+  }), [grand]).flat());
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = rows[0].map(() => ({ wch: 16 }));
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
+
+function drawChart(mode) {
+  const canvas = $('sales-chart');
+  const ctx = canvas.getContext('2d');
+  const records = load(KEYS.records);
+  const today = todayStr();
+  let labels = [];
+  let current = [];
+  let compare = [];
+  let currentLabel = '';
+  let compareLabel = '';
+  if (mode === 'week') {
+    const w = getWeekRange(today);
+    labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    currentLabel = '本周';
+    compareLabel = '上周';
+    for (let i = 0; i < 7; i++) {
+      const d = dateAdd(w.from, i);
+      current.push(num(records[d]?.grandTotal));
+      compare.push(num(records[dateAdd(d, -7)]?.grandTotal));
+    }
+  } else if (mode === 'month') {
+    const mr = monthRange(today);
+    const days = parseInt(mr.to.slice(-2), 10);
+    currentLabel = '本月';
+    compareLabel = '上月';
+    for (let i = 1; i <= days; i++) {
+      const day = String(i).padStart(2, '0');
+      const d = mr.from.slice(0, 8) + day;
+      labels.push(String(i));
+      current.push(num(records[d]?.grandTotal));
+      compare.push(num(records[monthAdd(d, -1)]?.grandTotal));
+    }
+  } else {
+    const year = parseInt(today.slice(0, 4), 10);
+    labels = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    currentLabel = String(year);
+    compareLabel = String(year - 1);
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0');
+      current.push(sumMonth(year + '-' + mm));
+      compare.push(sumMonth((year - 1) + '-' + mm));
+    }
+  }
+  drawLineChart(ctx, canvas.width, canvas.height, labels, current, compare, currentLabel, compareLabel);
+}
+function sumMonth(month) {
+  const records = load(KEYS.records);
+  return Object.keys(records).filter(d => d.startsWith(month)).reduce((sum, d) => sum + num(records[d].grandTotal), 0);
+}
+function drawLineChart(ctx, w, h, labels, a, b, aLabel, bLabel) {
+  ctx.clearRect(0, 0, w, h);
+  const pad = { l: 58, r: 24, t: 34, b: 42 };
+  const max = Math.max(100, ...a, ...b);
+  const plotW = w - pad.l - pad.r;
+  const plotH = h - pad.t - pad.b;
+  ctx.strokeStyle = '#d6dce8';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + plotH * i / 4;
+    ctx.moveTo(pad.l, y);
+    ctx.lineTo(w - pad.r, y);
+    const val = max * (4 - i) / 4;
+    ctx.fillStyle = '#64748b';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('£' + Math.round(val), 8, y + 4);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#172033';
+  ctx.font = '13px sans-serif';
+  ctx.fillText(aLabel, pad.l, 18);
+  ctx.fillStyle = '#2563eb';
+  ctx.fillRect(pad.l + 50, 9, 20, 3);
+  ctx.fillStyle = '#172033';
+  ctx.fillText(bLabel, pad.l + 88, 18);
+  ctx.fillStyle = '#d97706';
+  ctx.fillRect(pad.l + 140, 9, 20, 3);
+  drawLine(a, '#2563eb');
+  drawLine(b, '#d97706');
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px sans-serif';
+  const step = Math.max(1, Math.ceil(labels.length / 10));
+  labels.forEach((label, i) => {
+    if (i % step !== 0 && i !== labels.length - 1) return;
+    const x = pad.l + (labels.length === 1 ? 0 : plotW * i / (labels.length - 1));
+    ctx.fillText(label, x - 8, h - 16);
+  });
+  function drawLine(values, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    values.forEach((val, i) => {
+      const x = pad.l + (values.length === 1 ? 0 : plotW * i / (values.length - 1));
+      const y = pad.t + plotH - (num(val) / max) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
   }
 }
 
-function subscribeToChanges() {
-  if (!supabase) return;
-  try {
-    supabase.channel('turnover-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnover_records' }, function(payload) {
-        try {
-          var records = load(KEYS.RECORDS);
-          if (payload.new && payload.new.date) { records[payload.new.date] = payload.new.data; save(KEYS.RECORDS, records); }
-          if (payload.eventType === 'DELETE' && payload.old) { delete records[payload.old.date]; save(KEYS.RECORDS, records); }
-          var dash = document.getElementById('tab-dashboard');
-          if (dash && dash.classList.contains('active')) refreshDashboard();
-          var ind = document.getElementById('supabase-sync-indicator');
-          if (ind) ind.textContent = '☁️ 实时更新 ' + new Date().toLocaleTimeString();
-        } catch(e) {}
-      }).subscribe();
-
-    supabase.channel('tip-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tip_records' }, function(payload) {
-        try {
-          var tips = load(KEYS.TIPS);
-          if (payload.new && payload.new.date) { tips[payload.new.date] = payload.new.data; save(KEYS.TIPS, tips); }
-          if (payload.eventType === 'DELETE' && payload.old) { delete tips[payload.old.date]; save(KEYS.TIPS, tips); }
-          var dash = document.getElementById('tab-dashboard');
-          if (dash && dash.classList.contains('active')) refreshDashboard();
-          var ind = document.getElementById('supabase-sync-indicator');
-          if (ind) ind.textContent = '☁️ 实时更新 ' + new Date().toLocaleTimeString();
-        } catch(e) {}
-      }).subscribe();
-
-    supabase.channel('staff-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_list' }, function(payload) {
-        try {
-          if (payload.new && payload.new.names) { staffList = payload.new.names; save(KEYS.STAFF, staffList); renderStaffList(); }
-        } catch(e) {}
-      }).subscribe();
-  } catch(e) { /* ignore */ }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
+function escapeAttr(s) { return escapeHtml(s); }
 
-// ==================== DATA SYNC ====================
-function exportAllData() {
-  const data = {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    records: load(KEYS.RECORDS),
-    tips: load(KEYS.TIPS),
-    staff: staffList
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = '餐厅数据备份_' + todayStr() + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  document.getElementById('sync-status').innerHTML = '<span style="color:#15803D;">✅ 数据已导出 (' + todayStr() + ')</span>';
-  toast('数据已导出');
-}
-
-function importAllData(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const imported = JSON.parse(e.target.result);
-      let mergedRecords = 0, mergedTips = 0;
-      // Merge records (newer data wins)
-      if (imported.records) {
-        const existingRecords = load(KEYS.RECORDS);
-        Object.entries(imported.records).forEach(([date, record]) => {
-          if (!existingRecords[date]) { existingRecords[date] = record; mergedRecords++; }
-        });
-        save(KEYS.RECORDS, existingRecords);
-      }
-      if (imported.tips) {
-        const existingTips = load(KEYS.TIPS);
-        Object.entries(imported.tips).forEach(([date, tip]) => {
-          if (!existingTips[date]) { existingTips[date] = tip; mergedTips++; }
-        });
-        save(KEYS.TIPS, existingTips);
-      }
-      if (imported.staff && Array.isArray(imported.staff)) {
-        imported.staff.forEach(name => {
-          if (!staffList.includes(name)) staffList.push(name);
-        });
-        saveStaff();
-      }
-      document.getElementById('sync-status').innerHTML =
-        '<span style="color:#15803D;">✅ 导入成功！合并了 ' + mergedRecords + ' 条营业额 + ' + mergedTips + ' 条小费记录</span>';
-      toast('数据导入成功');
-      if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard();
-    } catch(err) {
-      document.getElementById('sync-status').innerHTML = '<span style="color:#DC2626;">❌ 导入失败：文件格式不正确</span>';
-      toast('导入失败');
-    }
-  };
-  reader.readAsText(file);
-  input.value = '';
-}
-
-// ==================== TAB SWITCHING ====================
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    this.classList.add('active');
-    const tabId = 'tab-' + this.dataset.tab;
-    document.getElementById(tabId).classList.add('active');
-    if (this.dataset.tab === 'tips') { onTipTabOpen(); }
-    if (this.dataset.tab === 'dashboard') { refreshDashboard(); }
-    if (this.dataset.tab === 'staff') { renderStaffList(); }
-    if (this.dataset.tab === 'turnover') { calcTurnover(); }
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    $('view-' + btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'admin') showAdminDashboard(isAdmin());
+    if (btn.dataset.view === 'tips') loadTipsForDate();
+  });
+});
+turnoverIds.forEach(id => $(id).addEventListener('input', calcTurnover));
+['tip-total-cash', 'morning-card-tip', 'morning-cash-tip'].forEach(id => $(id).addEventListener('input', calcTips));
+$('current-date').addEventListener('change', loadSelectedDate);
+$('btn-submit-turnover').addEventListener('click', submitTurnover);
+$('btn-save-tips').addEventListener('click', saveTips);
+$('btn-admin-login').addEventListener('click', adminLogin);
+$('admin-password').addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+$('btn-admin-logout').addEventListener('click', adminLogout);
+$('btn-save-supabase').addEventListener('click', saveSupabaseConfig);
+$('btn-github-login').addEventListener('click', supabaseLogin);
+$('btn-github-logout').addEventListener('click', supabaseLogout);
+$('btn-cloud-pull').addEventListener('click', loadFromCloud);
+$('add-morning-staff').addEventListener('click', () => { morningRows = collectRows('morning'); morningRows.push({ name: '', hours: 0 }); renderStaffRows('morning'); calcTips(); });
+$('add-evening-staff').addEventListener('click', () => { eveningRows = collectRows('evening'); eveningRows.push({ name: '', hours: 0 }); renderStaffRows('evening'); calcTips(); });
+$('btn-add-staff').addEventListener('click', addStaff);
+$('detail-close').addEventListener('click', () => $('admin-detail').style.display = 'none');
+$('detail-save-turnover').addEventListener('click', saveAdminTurnover);
+$('detail-save-tips').addEventListener('click', saveAdminTips);
+$('detail-export-day').addEventListener('click', () => adminDate && exportWorkbook(adminDate, adminDate));
+$('export-today').addEventListener('click', () => exportWorkbook(todayStr(), todayStr()));
+$('export-week').addEventListener('click', () => { const w = getWeekRange(todayStr()); exportWorkbook(w.from, w.to); });
+$('export-month').addEventListener('click', () => { const m = monthRange(todayStr()); exportWorkbook(m.from, m.to); });
+$('export-custom').addEventListener('click', () => exportWorkbook($('export-from').value, $('export-to').value));
+document.addEventListener('input', e => {
+  if (e.target.matches('[data-period]')) {
+    if (e.target.dataset.period === 'morning') morningRows = collectRows('morning');
+    else eveningRows = collectRows('evening');
+    calcTips();
+  }
+});
+document.addEventListener('click', e => {
+  const removePeriod = e.target.dataset.removePeriod;
+  if (removePeriod) {
+    const rows = removePeriod === 'morning' ? collectRows('morning') : collectRows('evening');
+    rows.splice(parseInt(e.target.dataset.removeIdx, 10), 1);
+    if (!rows.length) rows.push({ name: '', hours: 0 });
+    if (removePeriod === 'morning') morningRows = rows;
+    else eveningRows = rows;
+    renderStaffRows(removePeriod);
+    calcTips();
+  }
+  if (e.target.dataset.detailDate) openDetail(e.target.dataset.detailDate);
+  if (e.target.dataset.exportDay) exportWorkbook(e.target.dataset.exportDay, e.target.dataset.exportDay);
+  if (e.target.dataset.deleteStaff) deleteStaff(parseInt(e.target.dataset.deleteStaff, 10));
+});
+document.querySelectorAll('.chart-mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    chartMode = btn.dataset.mode;
+    drawChart(chartMode);
   });
 });
 
-// ==================== TAB 1: TURNOVER ====================
-document.getElementById('turnover-date').value = todayStr();
-
-function calcTurnover() {
-  const tip = parseNum(document.getElementById('tip-amount').value);
-  const total = parseNum(document.getElementById('total-turnover').value);
-  const zReport = total - tip;
-  document.getElementById('z-report').value = fmt(zReport);
-
-  const cardMachine = parseNum(document.getElementById('card-machine').value);
-  const cardAmount = cardMachine - tip;
-  document.getElementById('card-amount').value = fmt(cardAmount);
-
-  const cash = parseNum(document.getElementById('cash-amount').value);
-  const online = parseNum(document.getElementById('online-amount').value);
-  const receipt = parseNum(document.getElementById('receipt-amount').value);
-  const oneTotal = cardAmount + cash + online + receipt;
-  document.getElementById('one-total').value = fmt(oneTotal);
-
-  const oneTotalEl = document.getElementById('one-total');
-  const diffBadge = document.getElementById('diff-badge');
-  if (zReport !== 0 || oneTotal !== 0) {
-    const diff = oneTotal - zReport;
-    if (Math.abs(diff) < 0.005) {
-      oneTotalEl.className = 'form-input result-match';
-      diffBadge.innerHTML = '<span class="result-badge match">✓ 相等</span>';
-    } else {
-      oneTotalEl.className = 'form-input result-diff';
-      diffBadge.innerHTML = '<span class="result-badge diff">差额 ' + (diff > 0 ? '+' : '') + fmtPlain(diff) + '</span>';
-    }
-  } else { oneTotalEl.className = 'form-input'; diffBadge.innerHTML = ''; }
-
-  const deposit = parseNum(document.getElementById('deposit-amount').value);
-  const phoneDeposit = parseNum(document.getElementById('phone-deposit').value);
-  const deliveroo = parseNum(document.getElementById('deliveroo-amount').value);
-  const grandTotal = oneTotal + deposit + phoneDeposit + deliveroo;
-  document.getElementById('grand-total').value = fmt(grandTotal);
-}
-
-function getTurnoverData() {
-  return {
-    date: document.getElementById('turnover-date').value,
-    tipAmount: parseNum(document.getElementById('tip-amount').value),
-    totalTurnover: parseNum(document.getElementById('total-turnover').value),
-    cardMachineIncome: parseNum(document.getElementById('card-machine').value),
-    cashAmount: parseNum(document.getElementById('cash-amount').value),
-    onlineAmount: parseNum(document.getElementById('online-amount').value),
-    receiptAmount: parseNum(document.getElementById('receipt-amount').value),
-    depositAmount: parseNum(document.getElementById('deposit-amount').value),
-    phoneDepositAmount: parseNum(document.getElementById('phone-deposit').value),
-    deliverooAmount: parseNum(document.getElementById('deliveroo-amount').value)
-  };
-}
-
-function setTurnoverData(d) {
-  document.getElementById('turnover-date').value = d.date || todayStr();
-  document.getElementById('tip-amount').value = d.tipAmount || '';
-  document.getElementById('total-turnover').value = d.totalTurnover || '';
-  document.getElementById('card-machine').value = d.cardMachineIncome || '';
-  document.getElementById('cash-amount').value = d.cashAmount != null ? d.cashAmount : '0';
-  document.getElementById('online-amount').value = d.onlineAmount || '';
-  document.getElementById('receipt-amount').value = d.receiptAmount || '';
-  document.getElementById('deposit-amount').value = d.depositAmount || '';
-  document.getElementById('phone-deposit').value = d.phoneDepositAmount || '';
-  document.getElementById('deliveroo-amount').value = d.deliverooAmount || '';
-  calcTurnover();
-}
-
-function onTurnoverDateChange() {
-  const date = document.getElementById('turnover-date').value;
-  const records = load(KEYS.RECORDS);
-  if (records[date]) { setTurnoverData(records[date]); }
-  else { clearTurnover(); document.getElementById('turnover-date').value = date; }
-}
-
-function clearTurnover() {
-  const date = document.getElementById('turnover-date').value;
-  document.getElementById('tip-amount').value = '';
-  document.getElementById('total-turnover').value = '';
-  document.getElementById('card-machine').value = '';
-  document.getElementById('cash-amount').value = '0';
-  document.getElementById('online-amount').value = '';
-  document.getElementById('receipt-amount').value = '';
-  document.getElementById('deposit-amount').value = '';
-  document.getElementById('phone-deposit').value = '';
-  document.getElementById('deliveroo-amount').value = '';
-  document.getElementById('turnover-date').value = date;
-  document.getElementById('turnover-saved-info').textContent = '';
-  calcTurnover();
-}
-
-function saveTurnover() {
-  const data = getTurnoverData();
-  if (!data.date) { toast('请选择日期'); return; }
-  const records = load(KEYS.RECORDS);
-  records[data.date] = data;
-  save(KEYS.RECORDS, records);
-  document.getElementById('turnover-saved-info').textContent = '✅ 已保存 ' + data.date;
-  toast('已保存营业额');
-  syncTurnoverToCloud(data.date, data);
-}
-
-function loadTurnoverRecord() {
-  const date = document.getElementById('turnover-date').value;
-  const records = load(KEYS.RECORDS);
-  if (records[date]) { setTurnoverData(records[date]); toast('已加载 ' + date); }
-  else { toast('未找到 ' + date + ' 的记录'); }
-}
-
-// ==================== TAB 2: TIPS ====================
-document.getElementById('tip-date').value = todayStr();
-let morningStaffCount = 1, eveningStaffCount = 1;
-
-function syncTipFromTurnover() {
-  // Auto-fill total daily Card tip from turnover record's tip amount
-  const date = document.getElementById('tip-date').value;
-  const records = load(KEYS.RECORDS);
-  if (records[date] && records[date].tipAmount) {
-    const el = document.getElementById('total-daily-card-tip');
-    if (!el.value || parseNum(el.value) === 0) {
-      el.value = records[date].tipAmount;
-      el.style.background = '#FFF7ED';
-      el.style.borderColor = '#FDBA74';
-    }
-  }
-}
-
-function onTipTabOpen() {
-  document.getElementById('tip-date').value = document.getElementById('turnover-date').value;
-  syncTipFromTurnover();
-  calcMorningTips();
-  calcEveningTips();
-}
-
-function onTipDateChange() {
-  syncTipFromTurnover();
-  const date = document.getElementById('tip-date').value;
-  const tips = load(KEYS.TIPS);
-  if (tips[date]) { setTipData(tips[date]); }
-  else {
-    document.getElementById('morning-card-tip').value = '';
-    document.getElementById('morning-cash-tip').value = '';
-    document.getElementById('total-daily-cash-tip').value = '';
-    morningStaffCount = 1; eveningStaffCount = 1;
-    renderMorningStaff(); renderEveningStaff();
-  }
-  syncTipFromTurnover();
-}
-
-function renderMorningStaff() {
-  const container = document.getElementById('morning-staff-rows');
-  let html = '';
-  for (let i = 0; i < morningStaffCount; i++) {
-    html += '<div class="staff-row">';
-    html += '<select id="morning-staff-name-' + i + '" style="min-width:110px;"><option value="">-- 选择员工 --</option>';
-    staffList.forEach(n => { html += '<option value="' + n + '">' + n + '</option>'; });
-    html += '</select>';
-    if (morningStaffCount > 1) html += '<input type="number" step="0.25" id="morning-staff-hours-' + i + '" placeholder="工时(h)" style="width:80px;" oninput="calcMorningTips()">';
-    html += '<span class="staff-amount-split" id="morning-staff-amount-' + i + '"><span class="card-amt">Card: -</span> <span class="cash-amt">Cash: -</span></span>';
-    if (morningStaffCount > 1) html += '<button class="btn btn-danger btn-xs" onclick="removeMorningStaff(' + i + ')">×</button>';
-    html += '</div>';
-  }
-  container.innerHTML = html;
-  calcMorningTips();
-}
-
-function addMorningStaff() { morningStaffCount++; renderMorningStaff(); }
-function removeMorningStaff(idx) { if (morningStaffCount <= 1) return; morningStaffCount--; renderMorningStaff(); }
-
-function distributeFloorTips(period, staffCount, cardPool, cashPool) {
-  if (staffCount === 1) {
-    const el = document.getElementById(period + '-staff-amount-0');
-    if (el) el.innerHTML = '<span class="card-amt">Card: £' + fmtPlain(cardPool) + '</span> <span class="cash-amt">Cash: £' + fmtPlain(cashPool) + '</span>';
-  } else {
-    let totalHours = 0; const hours = [];
-    for (let i = 0; i < staffCount; i++) {
-      const h = parseNum(document.getElementById(period + '-staff-hours-' + i)?.value);
-      hours.push(h); totalHours += h;
-    }
-    if (totalHours > 0) {
-      const cardRate = cardPool / totalHours, cashRate = cashPool / totalHours;
-      let cardAssigned = 0, cashAssigned = 0;
-      for (let i = 0; i < staffCount; i++) {
-        const isLast = (i === staffCount - 1);
-        const cardAmt = isLast ? trunc2(cardPool - cardAssigned) : trunc2(cardRate * hours[i]);
-        const cashAmt = isLast ? trunc2(cashPool - cashAssigned) : trunc2(cashRate * hours[i]);
-        cardAssigned += cardAmt; cashAssigned += cashAmt;
-        const el = document.getElementById(period + '-staff-amount-' + i);
-        if (el) el.innerHTML = '<span class="card-amt">Card: £' + fmtPlain(cardAmt) + '</span> <span class="cash-amt">Cash: £' + fmtPlain(cashAmt) + '</span>';
-      }
-    } else {
-      for (let i = 0; i < staffCount; i++) {
-        const el = document.getElementById(period + '-staff-amount-' + i);
-        if (el) el.innerHTML = '<span class="card-amt">Card: -</span> <span class="cash-amt">Cash: -</span>';
-      }
-    }
-  }
-}
-
-function calcMorningTips() {
-  const cardTip = parseNum(document.getElementById('morning-card-tip').value);
-  const cashTip = parseNum(document.getElementById('morning-cash-tip').value);
-  document.getElementById('morning-total-tip').value = fmt(cardTip + cashTip);
-  const kCard = trunc2(cardTip * 0.5), kCash = trunc2(cashTip * 0.5);
-  document.getElementById('morning-kitchen-card').value = fmt(kCard);
-  document.getElementById('morning-kitchen-cash').value = fmt(kCash);
-  document.getElementById('morning-floor-card').value = fmt(cardTip - kCard);
-  document.getElementById('morning-floor-cash').value = fmt(cashTip - kCash);
-  distributeFloorTips('morning', morningStaffCount, cardTip - kCard, cashTip - kCash);
-  calcEveningTips();
-}
-
-function calcEveningTips() {
-  const totalCard = parseNum(document.getElementById('total-daily-card-tip').value);
-  const totalCash = parseNum(document.getElementById('total-daily-cash-tip').value);
-  const morningCard = parseNum(document.getElementById('morning-card-tip').value);
-  const morningCash = parseNum(document.getElementById('morning-cash-tip').value);
-  document.getElementById('morning-card-distributed').value = fmt(morningCard);
-  document.getElementById('morning-cash-distributed').value = fmt(morningCash);
-  const eveCard = Math.max(0, totalCard - morningCard), eveCash = Math.max(0, totalCash - morningCash);
-  document.getElementById('evening-card-pool').value = fmt(eveCard);
-  document.getElementById('evening-cash-pool').value = fmt(eveCash);
-  const kCard = trunc2(eveCard * 0.5), kCash = trunc2(eveCash * 0.5);
-  document.getElementById('evening-kitchen-card').value = fmt(kCard);
-  document.getElementById('evening-kitchen-cash').value = fmt(kCash);
-  document.getElementById('evening-floor-card').value = fmt(eveCard - kCard);
-  document.getElementById('evening-floor-cash').value = fmt(eveCash - kCash);
-  distributeFloorTips('evening', eveningStaffCount, eveCard - kCard, eveCash - kCash);
-}
-
-function renderEveningStaff() {
-  const container = document.getElementById('evening-staff-rows');
-  let html = '';
-  for (let i = 0; i < eveningStaffCount; i++) {
-    html += '<div class="staff-row">';
-    html += '<select id="evening-staff-name-' + i + '" style="min-width:110px;"><option value="">-- 选择员工 --</option>';
-    staffList.forEach(n => { html += '<option value="' + n + '">' + n + '</option>'; });
-    html += '</select>';
-    if (eveningStaffCount > 1) html += '<input type="number" step="0.25" id="evening-staff-hours-' + i + '" placeholder="工时(h)" style="width:80px;" oninput="calcEveningTips()">';
-    html += '<span class="staff-amount-split" id="evening-staff-amount-' + i + '"><span class="card-amt">Card: -</span> <span class="cash-amt">Cash: -</span></span>';
-    if (eveningStaffCount > 1) html += '<button class="btn btn-danger btn-xs" onclick="removeEveningStaff(' + i + ')">×</button>';
-    html += '</div>';
-  }
-  container.innerHTML = html;
-  calcEveningTips();
-}
-
-function addEveningStaff() { eveningStaffCount++; renderEveningStaff(); }
-function removeEveningStaff(idx) { if (eveningStaffCount <= 1) return; eveningStaffCount--; renderEveningStaff(); }
-
-function parseCardCash(el) {
-  if (!el) return { card: 0, cash: 0 };
-  const text = el.textContent || '';
-  const cm = text.match(/Card:\s*£?([\d,.]+)/);
-  const csm = text.match(/Cash:\s*£?([\d,.]+)/);
-  return { card: cm ? parseNum(cm[1]) : 0, cash: csm ? parseNum(csm[1]) : 0 };
-}
-
-function getTipData() {
-  const data = {
-    date: document.getElementById('tip-date').value,
-    morningCardTip: parseNum(document.getElementById('morning-card-tip').value),
-    morningCashTip: parseNum(document.getElementById('morning-cash-tip').value),
-    totalDailyCardTip: parseNum(document.getElementById('total-daily-card-tip').value),
-    totalDailyCashTip: parseNum(document.getElementById('total-daily-cash-tip').value),
-    morningStaff: [], eveningStaff: []
-  };
-  for (let i = 0; i < morningStaffCount; i++) {
-    const nEl = document.getElementById('morning-staff-name-' + i);
-    if (nEl && nEl.value) {
-      const cc = parseCardCash(document.getElementById('morning-staff-amount-' + i));
-      data.morningStaff.push({ name: nEl.value, hours: morningStaffCount === 1 ? 0 : parseNum(document.getElementById('morning-staff-hours-' + i)?.value), cardAmount: cc.card, cashAmount: cc.cash });
-    }
-  }
-  for (let i = 0; i < eveningStaffCount; i++) {
-    const nEl = document.getElementById('evening-staff-name-' + i);
-    if (nEl && nEl.value) {
-      const cc = parseCardCash(document.getElementById('evening-staff-amount-' + i));
-      data.eveningStaff.push({ name: nEl.value, hours: eveningStaffCount === 1 ? 0 : parseNum(document.getElementById('evening-staff-hours-' + i)?.value), cardAmount: cc.card, cashAmount: cc.cash });
-    }
-  }
-  return data;
-}
-
-function setTipData(d) {
-  document.getElementById('tip-date').value = d.date || todayStr();
-  document.getElementById('morning-card-tip').value = d.morningCardTip || '';
-  document.getElementById('morning-cash-tip').value = d.morningCashTip || '';
-  document.getElementById('total-daily-card-tip').value = d.totalDailyCardTip || d.totalDailyTip || '';
-  document.getElementById('total-daily-cash-tip').value = d.totalDailyCashTip || '';
-  if (d.morningStaff && d.morningStaff.length > 0) {
-    morningStaffCount = d.morningStaff.length; renderMorningStaff();
-    d.morningStaff.forEach((s, i) => {
-      const nEl = document.getElementById('morning-staff-name-' + i); if (nEl && s.name) nEl.value = s.name;
-      if (morningStaffCount > 1) { const hEl = document.getElementById('morning-staff-hours-' + i); if (hEl) hEl.value = s.hours || ''; }
-    });
-  }
-  if (d.eveningStaff && d.eveningStaff.length > 0) {
-    eveningStaffCount = d.eveningStaff.length; renderEveningStaff();
-    d.eveningStaff.forEach((s, i) => {
-      const nEl = document.getElementById('evening-staff-name-' + i); if (nEl && s.name) nEl.value = s.name;
-      if (eveningStaffCount > 1) { const hEl = document.getElementById('evening-staff-hours-' + i); if (hEl) hEl.value = s.hours || ''; }
-    });
-  }
-  calcMorningTips(); calcEveningTips();
-}
-
-function clearTips() {
-  const date = document.getElementById('tip-date').value;
-  document.getElementById('morning-card-tip').value = '';
-  document.getElementById('morning-cash-tip').value = '';
-  document.getElementById('total-daily-card-tip').value = '';
-  document.getElementById('total-daily-cash-tip').value = '';
-  morningStaffCount = 1; eveningStaffCount = 1;
-  document.getElementById('tip-date').value = date;
-  document.getElementById('tip-saved-info').textContent = '';
-  renderMorningStaff(); renderEveningStaff();
-}
-
-function saveTips() {
-  const data = getTipData();
-  if (!data.date) { toast('请选择日期'); return; }
-  const tips = load(KEYS.TIPS);
-  tips[data.date] = data;
-  save(KEYS.TIPS, tips);
-  document.getElementById('tip-saved-info').textContent = '✅ 已保存 ' + data.date;
-  toast('已保存小费');
-  syncTipsToCloud(data.date, data);
-}
-
-function loadTipRecord() {
-  const date = document.getElementById('tip-date').value;
-  const tips = load(KEYS.TIPS);
-  if (tips[date]) { setTipData(tips[date]); toast('已加载 ' + date); }
-  else {
-    clearTips();
-    document.getElementById('tip-date').value = date;
-    syncTipFromTurnover();
-    toast('新建 ' + date + ' 的小费记录');
-  }
-}
-
-// ==================== TAB 3: STAFF ====================
-function renderStaffList() {
-  const c = document.getElementById('staff-list');
-  c.innerHTML = staffList.length === 0
-    ? '<div class="empty-state">暂无员工，请添加</div>'
-    : staffList.map((n, i) => '<div class="staff-list-item"><span class="name">' + n + '</span><button class="btn btn-danger btn-xs" onclick="deleteStaff(' + i + ')">删除</button></div>').join('');
-  renderMorningStaff(); renderEveningStaff();
-}
-function addStaff() {
-  const n = document.getElementById('new-staff-name').value.trim();
-  if (!n) { toast('请输入姓名'); return; }
-  if (staffList.includes(n)) { toast('已存在'); return; }
-  staffList.push(n); saveStaff(); document.getElementById('new-staff-name').value = ''; toast('已添加 ' + n);
-}
-function deleteStaff(idx) { const n = staffList[idx]; staffList.splice(idx, 1); saveStaff(); toast('已删除 ' + n); }
-
-// ==================== TAB 4: DASHBOARD & EXPORT ====================
-function getWeekRange(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDay() || 7; // Sun=7
-  const mon = new Date(d); mon.setDate(d.getDate() - day + 1);
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-  return { from: mon.toISOString().split('T')[0], to: sun.toISOString().split('T')[0] };
-}
-
-function refreshDashboard() {
-  const records = load(KEYS.RECORDS);
-  const tips = load(KEYS.TIPS);
-  const dates = [...new Set([...Object.keys(records), ...Object.keys(tips)])].sort().reverse();
-
-  // Stats
-  const now = new Date(); const thisMonth = now.toISOString().substring(0, 7);
-  const week = getWeekRange(todayStr());
-  let todayGT = 0, weekGT = 0, monthGT = 0;
-  dates.forEach(date => {
-    const d = records[date];
-    if (!d) return;
-    const card = (d.cardMachineIncome - d.tipAmount) || 0;
-    const gt = card + (d.cashAmount || 0) + (d.onlineAmount || 0) + (d.receiptAmount || 0) + (d.depositAmount || 0) + (d.phoneDepositAmount || 0) + (d.deliverooAmount || 0);
-    if (date === todayStr()) todayGT = gt;
-    if (date >= week.from && date <= week.to) weekGT += gt;
-    if (date.startsWith(thisMonth)) monthGT += gt;
-  });
-  document.getElementById('stats-row').innerHTML =
-    '<div class="stat-card"><div class="stat-value">£' + fmtPlain(todayGT) + '</div><div class="stat-label">今日 Grand Total</div></div>' +
-    '<div class="stat-card"><div class="stat-value">£' + fmtPlain(weekGT) + '</div><div class="stat-label">本周合计</div></div>' +
-    '<div class="stat-card"><div class="stat-value">£' + fmtPlain(monthGT) + '</div><div class="stat-label">本月合计</div></div>' +
-    '<div class="stat-card"><div class="stat-value">' + dates.length + '</div><div class="stat-label">总记录天数</div></div>';
-
-  // Table
-  document.getElementById('record-count').textContent = '(' + dates.length + ' 天)';
-  const tbody = document.getElementById('daily-table-body');
-  const empty = document.getElementById('empty-dashboard');
-  if (dates.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-
-  tbody.innerHTML = dates.map(date => {
-    const d = records[date];
-    const t = tips[date];
-    if (!d && !t) return '';
-    // Turnover data
-    let grandTotal = '', zReport = '', tipAmt = '', diff = '', diffCls = '';
-    if (d) {
-      const card = (d.cardMachineIncome - d.tipAmount) || 0;
-      const oneTotal = card + (d.cashAmount || 0) + (d.onlineAmount || 0) + (d.receiptAmount || 0);
-      grandTotal = fmtPlain(oneTotal + (d.depositAmount || 0) + (d.phoneDepositAmount || 0) + (d.deliverooAmount || 0));
-      zReport = fmtPlain(d.totalTurnover - d.tipAmount);
-      tipAmt = fmtPlain(d.tipAmount);
-      const dff = oneTotal - (d.totalTurnover - d.tipAmount);
-      diff = (dff >= 0 ? '+' : '') + fmtPlain(dff);
-      diffCls = Math.abs(dff) < 0.005 ? 'match' : 'mismatch';
-    }
-    // Tip summary
-    let tipSummary = '-';
-    if (t) {
-      const morningTotal = (t.morningCardTip || 0) + (t.morningCashTip || 0);
-      const totalCard = t.totalDailyCardTip || t.totalDailyTip || 0;
-      const totalCash = t.totalDailyCashTip || 0;
-      const eveCard = Math.max(0, totalCard - (t.morningCardTip || 0));
-      const eveCash = Math.max(0, totalCash - (t.morningCashTip || 0));
-      tipSummary = 'C:£' + fmtPlain(totalCard) + ' CA:£' + fmtPlain(totalCash) + ' (早' + (t.morningStaff||[]).length + '人+晚' + (t.eveningStaff||[]).length + '人)';
-    }
-    return '<tr>' +
-      '<td><b>' + date + '</b></td>' +
-      '<td>' + grandTotal + '</td>' +
-      '<td>' + zReport + '</td>' +
-      '<td class="diff-cell ' + diffCls + '">' + (d ? diff : '-') + '</td>' +
-      '<td>' + tipAmt + '</td>' +
-      '<td style="font-size:11px;">' + tipSummary + '</td>' +
-      '<td>' +
-      '<button class="btn btn-xs btn-outline" onclick="viewDayDetail(\'' + date + '\')">查看</button> ' +
-      '<button class="btn btn-xs btn-success" onclick="exportSingleDay(\'' + date + '\')">导出</button>' +
-      '</td></tr>';
-  }).join('');
-
-  // Export preview
-  const monthDates = dates.filter(d => d.startsWith(thisMonth));
-  document.getElementById('export-preview').innerHTML =
-    '<div style="text-align:center;padding:10px;background:#F0F9FF;border-radius:10px;font-size:13px;">' +
-    '📊 本月 (<b>' + thisMonth + '</b>) 共 <b>' + monthDates.length + '</b> 天记录 | 💰 小费共 <b>' + Object.keys(tips).filter(d => d.startsWith(thisMonth)).length + '</b> 天</div>';
-  document.getElementById('export-date-from').value = thisMonth + '-01';
-  document.getElementById('export-date-to').value = todayStr();
-}
-
-function viewDayDetail(date) {
-  // Switch to turnover tab and load that date
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('[data-tab="turnover"]').classList.add('active');
-  document.getElementById('tab-turnover').classList.add('active');
-  document.getElementById('turnover-date').value = date;
-  loadTurnoverRecord();
-}
-
-// ==================== EXPORT ====================
-function buildWorkbook(dateFrom, dateTo) {
-  const records = load(KEYS.RECORDS);
-  const tips = load(KEYS.TIPS);
-  const dates = [...new Set([...Object.keys(records), ...Object.keys(tips)])].filter(d => d >= dateFrom && d <= dateTo).sort();
-  if (dates.length === 0) { toast('该范围内没有数据'); return null; }
-  const wb = XLSX.utils.book_new();
-
-  // Sheet 1: Daily Turnover
-  const tRows = [['日期', '小费金额', 'Total总营业额', 'Z Report', '卡机收入', 'Card金额', 'Cash', 'Online', 'Receipt', '1Total', '差额', 'Deposit', 'Phone Deposit', 'Deliveroo', 'Grand Total']];
-  dates.forEach(date => {
-    const d = records[date];
-    if (!d) return;
-    const zR = d.totalTurnover - d.tipAmount;
-    const card = d.cardMachineIncome - d.tipAmount;
-    const oneT = card + (d.cashAmount||0) + (d.onlineAmount||0) + (d.receiptAmount||0);
-    const gt = oneT + (d.depositAmount||0) + (d.phoneDepositAmount||0) + (d.deliverooAmount||0);
-    tRows.push([date, d.tipAmount, d.totalTurnover, zR, d.cardMachineIncome, card, d.cashAmount||0, d.onlineAmount||0, d.receiptAmount||0, oneT, oneT - zR, d.depositAmount||0, d.phoneDepositAmount||0, d.deliverooAmount||0, gt]);
-  });
-  const ws1 = XLSX.utils.aoa_to_sheet(tRows); ws1['!cols'] = tRows[0].map(()=>({wch:14}));
-  XLSX.utils.book_append_sheet(wb, ws1, '每日营业额');
-
-  // ---- Build pivot: dates x people for Card & Cash ----
-  // Collect all people who appear in tips for this range
-  const peopleSet = new Set();
-  const tipDataByDate = {}; // { date: { kitchen: {card, cash}, people: { name: {card, cash} } } }
-  dates.forEach(date => {
-    const d = tips[date];
-    if (!d) return;
-    const mCard = d.morningCardTip||0, mCash = d.morningCashTip||0;
-    const tCard = d.totalDailyCardTip||d.totalDailyTip||0, tCash = d.totalDailyCashTip||0;
-    const eCard = Math.max(0, tCard-mCard), eCash = Math.max(0, tCash-mCash);
-    const mkCard = trunc2(mCard*0.5), mkCash = trunc2(mCash*0.5);
-    const ekCard = trunc2(eCard*0.5), ekCash = trunc2(eCash*0.5);
-
-    const entry = { kitchen: { card: mkCard + ekCard, cash: mkCash + ekCash }, people: {} };
-
-    // Morning floor
-    (d.morningStaff||[]).forEach(s => {
-      if (!entry.people[s.name]) entry.people[s.name] = { card: 0, cash: 0 };
-      entry.people[s.name].card += s.cardAmount||0;
-      entry.people[s.name].cash += s.cashAmount||0;
-    });
-    // Evening floor
-    (d.eveningStaff||[]).forEach(s => {
-      if (!entry.people[s.name]) entry.people[s.name] = { card: 0, cash: 0 };
-      entry.people[s.name].card += s.cardAmount||0;
-      entry.people[s.name].cash += s.cashAmount||0;
-    });
-
-    tipDataByDate[date] = entry;
-    peopleSet.add('厨房');
-    Object.keys(entry.people).forEach(n => peopleSet.add(n));
-  });
-
-  // Sort people: 厨房 first, then alphabetically
-  const peopleSorted = ['厨房', ...Array.from(peopleSet).filter(n => n !== '厨房').sort()];
-
-  // ---- Sheet 2: Card小费明细 (dates x people) ----
-  const cardHeader = ['日期', ...peopleSorted.map(n => n + ' (Card)'), 'Card合计'];
-  const cardRows = [cardHeader];
-  const cardTotals = {}; peopleSorted.forEach(n => { cardTotals[n] = 0; });
-  let grandCardTotal = 0;
-
-  dates.forEach(date => {
-    const entry = tipDataByDate[date];
-    if (!entry) return;
-    const row = [date];
-    let rowTotal = 0;
-    peopleSorted.forEach(n => {
-      let val = 0;
-      if (n === '厨房') val = entry.kitchen.card;
-      else val = (entry.people[n]||{}).card || 0;
-      row.push(val);
-      cardTotals[n] = (cardTotals[n]||0) + val;
-      rowTotal += val;
-    });
-    row.push(rowTotal);
-    grandCardTotal += rowTotal;
-    cardRows.push(row);
-  });
-
-  // Totals row
-  const cardTotalRow = ['合计'];
-  let checkGrandCard = 0;
-  peopleSorted.forEach(n => { cardTotalRow.push(cardTotals[n]); checkGrandCard += cardTotals[n]; });
-  cardTotalRow.push(checkGrandCard);
-  cardRows.push(cardTotalRow);
-
-  const ws2 = XLSX.utils.aoa_to_sheet(cardRows);
-  ws2['!cols'] = cardHeader.map(()=>({wch:16}));
-  XLSX.utils.book_append_sheet(wb, ws2, 'Card小费明细');
-
-  // ---- Sheet 3: Cash小费明细 (dates x people) ----
-  const cashHeader = ['日期', ...peopleSorted.map(n => n + ' (Cash)'), 'Cash合计'];
-  const cashRows = [cashHeader];
-  const cashTotals = {}; peopleSorted.forEach(n => { cashTotals[n] = 0; });
-  let grandCashTotal = 0;
-
-  dates.forEach(date => {
-    const entry = tipDataByDate[date];
-    if (!entry) return;
-    const row = [date];
-    let rowTotal = 0;
-    peopleSorted.forEach(n => {
-      let val = 0;
-      if (n === '厨房') val = entry.kitchen.cash;
-      else val = (entry.people[n]||{}).cash || 0;
-      row.push(val);
-      cashTotals[n] = (cashTotals[n]||0) + val;
-      rowTotal += val;
-    });
-    row.push(rowTotal);
-    grandCashTotal += rowTotal;
-    cashRows.push(row);
-  });
-
-  const cashTotalRow = ['合计'];
-  let checkGrandCash = 0;
-  peopleSorted.forEach(n => { cashTotalRow.push(cashTotals[n]); checkGrandCash += cashTotals[n]; });
-  cashTotalRow.push(checkGrandCash);
-  cashRows.push(cashTotalRow);
-
-  const ws3 = XLSX.utils.aoa_to_sheet(cashRows);
-  ws3['!cols'] = cashHeader.map(()=>({wch:16}));
-  XLSX.utils.book_append_sheet(wb, ws3, 'Cash小费明细');
-
-  // ---- Sheet 4: 营业额汇总 ----
-  const sumRows = [['项目', '金额']];
-  let totTurnover=0, totTip=0, totCard=0, totCash=0, totOnline=0, totReceipt=0, totDeposit=0, totPhoneDeposit=0, totDeliveroo=0;
-  dates.forEach(date => {
-    const d = records[date]; if (!d) return;
-    totTurnover += d.totalTurnover||0; totTip += d.tipAmount||0;
-    totCard += (d.cardMachineIncome - d.tipAmount)||0; totCash += d.cashAmount||0;
-    totOnline += d.onlineAmount||0; totReceipt += d.receiptAmount||0;
-    totDeposit += d.depositAmount||0; totPhoneDeposit += d.phoneDepositAmount||0;
-    totDeliveroo += d.deliverooAmount||0;
-  });
-  const gt = totCard+totCash+totOnline+totReceipt+totDeposit+totPhoneDeposit+totDeliveroo;
-  sumRows.push(['范围', dateFrom+' ~ '+dateTo], ['总营业额Total', totTurnover], ['总小费', totTip], ['总Card', totCard], ['总Cash', totCash], ['总Online', totOnline], ['总Receipt', totReceipt], ['总Deposit', totDeposit], ['总Phone Deposit', totPhoneDeposit], ['总Deliveroo', totDeliveroo], ['Grand Total', gt]);
-  const ws4 = XLSX.utils.aoa_to_sheet(sumRows); ws4['!cols'] = [{wch:24},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, ws4, '营业额汇总');
-
-  return wb;
-}
-
-function exportSingleDay(date) { const wb = buildWorkbook(date, date); if (wb) { XLSX.writeFile(wb, '餐厅报表_' + date + '.xlsx'); toast('✅ 已导出 ' + date); } }
-function exportDay() { exportSingleDay(todayStr()); }
-function exportMonth() {
-  const m = todayStr().substring(0,7);
-  const wb = buildWorkbook(m+'-01', m+'-31');
-  if (wb) { XLSX.writeFile(wb, '餐厅报表_' + m + '.xlsx'); toast('✅ 已导出本月'); }
-}
-function exportWeek() {
-  const w = getWeekRange(todayStr());
-  const wb = buildWorkbook(w.from, w.to);
-  if (wb) { XLSX.writeFile(wb, '餐厅报表_' + w.from + '_' + w.to + '.xlsx'); toast('✅ 已导出本周'); }
-}
-function exportCustom() {
-  const from = document.getElementById('export-date-from').value;
-  const to = document.getElementById('export-date-to').value;
-  if (!from || !to) { toast('请选择日期范围'); return; }
-  const wb = buildWorkbook(from, to);
-  if (wb) { XLSX.writeFile(wb, '餐厅报表_' + from + '_' + to + '.xlsx'); toast('✅ 已导出'); }
-}
-
-// ==================== INIT ====================
-function init() {
-  // Load Supabase config first
-  const sc = getSupabaseConfig();
-  if (sc.url) document.getElementById('supabase-url').value = sc.url;
-  if (sc.anonKey) document.getElementById('supabase-anon-key').value = sc.anonKey;
-  if (sc.appUrl) document.getElementById('supabase-app-url').value = sc.appUrl;
-
-  staffList = load(KEYS.STAFF);
-  document.getElementById('turnover-date').value = todayStr();
-  document.getElementById('tip-date').value = todayStr();
-  renderMorningStaff(); renderEveningStaff(); renderStaffList();
-  calcTurnover(); refreshDashboard();
-  initSupabase();
-}
-init();
+$('current-date').value = selectedDate;
+loadSelectedDate();
+showAdminDashboard(isAdmin());
+initSupabase();
 </script>
 </body>
 </html>
