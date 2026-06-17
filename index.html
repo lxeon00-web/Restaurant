@@ -29,8 +29,40 @@ body {
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
+body.app-locked .topbar,
+body.app-locked .tabs,
+body.app-locked main {
+  display: none;
+}
 button, input, select {
   font: inherit;
+}
+.app-login {
+  min-height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+body.app-locked .app-login {
+  display: flex;
+}
+.login-card {
+  width: min(420px, 100%);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.login-card h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.login-card p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
 }
 .topbar {
   position: sticky;
@@ -335,7 +367,19 @@ canvas {
 }
 </style>
 </head>
-<body>
+<body class="app-locked">
+<section class="app-login" id="app-login">
+  <div class="login-card">
+    <h1>餐厅每日算账</h1>
+    <p>请输入内部账号密码后使用。</p>
+    <div class="field"><label>账号</label><input id="app-login-user" autocomplete="username"></div>
+    <div class="field" style="margin-top:8px;"><label>密码</label><input id="app-login-pass" type="password" autocomplete="current-password"></div>
+    <div class="actions">
+      <button class="btn primary" id="btn-app-login">进入软件</button>
+    </div>
+    <div class="status" id="app-login-status"></div>
+  </div>
+</section>
 <header class="topbar">
   <div class="title">餐厅每日算账 V2</div>
   <div class="date-box">
@@ -373,12 +417,12 @@ canvas {
         <div class="field"><label>Cash 金额</label><input id="cash-amount" type="number" step="0.01" inputmode="decimal" value="0"></div>
 
         <div class="field"><label>Online 金额</label><input id="online-amount" type="number" step="0.01" inputmode="decimal"></div>
-        <div class="field"><label>Receipt 金额</label><input id="receipt-amount" type="number" step="0.01" inputmode="decimal" placeholder="如 -50"></div>
+        <div class="field"><label>Receipt 金额（输入正数，自动扣减）</label><input id="receipt-amount" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label>1Total</label><input id="one-total" readonly></div>
         <div class="field"><label>差额</label><input id="turnover-diff" readonly></div>
 
         <div class="field"><label>Deposit 金额</label><input id="deposit-amount" type="number" step="0.01" inputmode="decimal"></div>
-        <div class="field"><label>Phone Deposit</label><input id="phone-deposit" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Phone Deposit（输入正数，自动扣减）</label><input id="phone-deposit" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label>Deliveroo 金额</label><input id="deliveroo-amount" type="number" step="0.01" inputmode="decimal"></div>
       </div>
 
@@ -603,6 +647,8 @@ canvas {
 
 <script>
 const ADMIN_PASSWORD = '221830';
+const APP_LOGIN_USER = 'uchi';
+const APP_LOGIN_PASSWORD = '6262';
 const SUPABASE_CONFIG_KEY = 'resto_v2_supabase_config';
 const CLOUD_TABLES = {
   records: 'turnover_records_v2',
@@ -661,6 +707,20 @@ function showToast(message) {
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function unlockApp() {
+  const user = $('app-login-user').value.trim();
+  const pass = $('app-login-pass').value;
+  if (user === APP_LOGIN_USER && pass === APP_LOGIN_PASSWORD) {
+    document.body.classList.remove('app-locked');
+    $('app-login-pass').value = '';
+    $('app-login-status').textContent = '';
+    loadSelectedDate();
+    showAdminDashboard(isAdmin());
+    initSupabase();
+  } else {
+    $('app-login-status').textContent = '账号或密码错误';
+  }
 }
 function setSyncStatus(message) {
   const el = $('supabase-sync-indicator');
@@ -789,7 +849,6 @@ async function checkSupabaseSession() {
       if (logout) logout.style.display = '';
       setSyncStatus('已连接 Supabase，实时同步中');
       await loadFromCloud();
-      await pushLocalToCloud();
     } else {
       supabaseAuthed = false;
       if (status) status.innerHTML = '<span style="color:#D97706;">未登录，请点击 GitHub 登录</span>';
@@ -891,30 +950,6 @@ async function loadFromCloud() {
     setSyncStatus('云端拉取失败：' + (err.message || '未知错误'));
   }
 }
-async function pushLocalToCloud() {
-  if (!supabase || !supabaseAuthed) return;
-  try {
-    const records = load(KEYS.records);
-    const tips = load(KEYS.tips);
-    const staff = getStaffList();
-    const recordRows = Object.entries(records).map(([date, data]) => ({
-      date,
-      data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() },
-      updated_at: new Date().toISOString()
-    }));
-    const tipRows = Object.entries(tips).map(([date, data]) => ({
-      date,
-      data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() },
-      updated_at: new Date().toISOString()
-    }));
-    if (recordRows.length) await supabase.from(CLOUD_TABLES.records).upsert(recordRows, { onConflict: 'date' });
-    if (tipRows.length) await supabase.from(CLOUD_TABLES.tips).upsert(tipRows, { onConflict: 'date' });
-    await supabase.from(CLOUD_TABLES.staff).upsert({ id: 1, names: staff, updated_at: new Date().toISOString() });
-    setSyncStatus('本地数据已补同步到云端 ' + new Date().toLocaleTimeString());
-  } catch (err) {
-    setSyncStatus('本地数据上传云端失败：' + (err.message || '未知错误'));
-  }
-}
 function subscribeToCloudChanges() {
   if (!supabase || supabaseSubscribed) return;
   supabaseSubscribed = true;
@@ -970,6 +1005,13 @@ function getWeekRange(dateStr) {
   to.setDate(from.getDate() + 6);
   return { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0] };
 }
+function getBusinessWeekToDateRange(dateStr) {
+  const week = getWeekRange(dateStr);
+  const from = dateAdd(week.from, 1); // Tuesday; Monday is closed.
+  const today = dateStr;
+  const to = today <= week.to ? today : week.to;
+  return { from, to };
+}
 function monthRange(dateStr) {
   const m = dateStr.slice(0, 7);
   const first = m + '-01';
@@ -985,9 +1027,9 @@ function calcTurnoverFromData(d) {
   const totalCardTips = cardTips + extraTips;
   const zReport = num(d.totalTurnover) - cardTips;
   const cardAmount = num(d.cardMachineIncome) - totalCardTips;
-  const oneTotal = cardAmount + num(d.cashAmount) + num(d.onlineAmount) + num(d.receiptAmount);
+  const oneTotal = cardAmount + num(d.cashAmount) + num(d.onlineAmount) - num(d.receiptAmount);
   const diff = oneTotal - zReport;
-  const grandTotal = oneTotal + num(d.depositAmount) + num(d.phoneDepositAmount) + num(d.deliverooAmount);
+  const grandTotal = oneTotal + num(d.depositAmount) - num(d.phoneDepositAmount) + num(d.deliverooAmount);
   return { totalCardTips, zReport, cardAmount, oneTotal, diff, grandTotal };
 }
 function getTurnoverFormData() {
@@ -1311,7 +1353,7 @@ function refreshAdmin() {
   if (!isAdmin()) return;
   const records = load(KEYS.records);
   const dates = Object.keys(records).sort().reverse();
-  const week = getWeekRange(todayStr());
+  const week = getBusinessWeekToDateRange(todayStr());
   const month = todayStr().slice(0, 7);
   $('stat-today').textContent = money(records[todayStr()]?.grandTotal || 0);
   $('stat-week').textContent = money(sumRange(week.from, week.to));
@@ -1463,7 +1505,7 @@ function exportWorkbook(from, to) {
   const turnoverRows = [[
     '日期', 'Card tips', 'Extra tips', 'Total card tips', 'Total总营业额', 'Z Report',
     '卡机收入', 'Card金额', 'Cash', 'Online', 'Receipt', '1Total', '差额',
-    'Deposit', 'Phone Deposit', 'Deliveroo', 'Grand Total'
+    'Deposit', 'Phone Deposit(扣减)', 'Deliveroo', 'Grand Total'
   ]];
   dates.forEach(date => {
     const r = records[date];
@@ -1497,7 +1539,7 @@ function exportWorkbook(from, to) {
     acc.grand += num(r.grandTotal);
     return acc;
   }, { turnover: 0, tips: 0, card: 0, cash: 0, online: 0, receipt: 0, deposit: 0, phone: 0, deliveroo: 0, grand: 0 });
-  sumRows.push(['范围', from + ' ~ ' + to], ['总营业额Total', totals.turnover], ['总Card tips', totals.tips], ['总Card', totals.card], ['总Cash', totals.cash], ['总Online', totals.online], ['总Receipt', totals.receipt], ['总Deposit', totals.deposit], ['总Phone Deposit', totals.phone], ['总Deliveroo', totals.deliveroo], ['Grand Total', totals.grand]);
+  sumRows.push(['范围', from + ' ~ ' + to], ['总营业额Total', totals.turnover], ['总Card tips', totals.tips], ['总Card', totals.card], ['总Cash', totals.cash], ['总Online', totals.online], ['总Receipt', totals.receipt], ['总Deposit', totals.deposit], ['总Phone Deposit(扣减)', totals.phone], ['总Deliveroo', totals.deliveroo], ['Grand Total', totals.grand]);
   const ws4 = XLSX.utils.aoa_to_sheet(sumRows);
   ws4['!cols'] = [{ wch: 24 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(wb, ws4, '营业额汇总');
@@ -1555,10 +1597,10 @@ function drawChart(mode) {
   let compareLabel = '';
   if (mode === 'week') {
     const w = getWeekRange(today);
-    labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    labels = ['周二', '周三', '周四', '周五', '周六', '周日'];
     currentLabel = '本周';
     compareLabel = '上周';
-    for (let i = 0; i < 7; i++) {
+    for (let i = 1; i < 7; i++) {
       const d = dateAdd(w.from, i);
       current.push(num(records[d]?.grandTotal));
       compare.push(num(records[dateAdd(d, -7)]?.grandTotal));
@@ -1586,13 +1628,13 @@ function drawChart(mode) {
       compare.push(sumMonth((year - 1) + '-' + mm));
     }
   }
-  drawLineChart(ctx, canvas.width, canvas.height, labels, current, compare, currentLabel, compareLabel);
+  drawBarChart(ctx, canvas.width, canvas.height, labels, current, compare, currentLabel, compareLabel);
 }
 function sumMonth(month) {
   const records = load(KEYS.records);
   return Object.keys(records).filter(d => d.startsWith(month)).reduce((sum, d) => sum + num(records[d].grandTotal), 0);
 }
-function drawLineChart(ctx, w, h, labels, a, b, aLabel, bLabel) {
+function drawBarChart(ctx, w, h, labels, a, b, aLabel, bLabel) {
   ctx.clearRect(0, 0, w, h);
   const pad = { l: 58, r: 24, t: 34, b: 42 };
   const max = Math.max(100, ...a, ...b);
@@ -1620,27 +1662,26 @@ function drawLineChart(ctx, w, h, labels, a, b, aLabel, bLabel) {
   ctx.fillText(bLabel, pad.l + 88, 18);
   ctx.fillStyle = '#d97706';
   ctx.fillRect(pad.l + 140, 9, 20, 3);
-  drawLine(a, '#2563eb');
-  drawLine(b, '#d97706');
+  const slotW = plotW / Math.max(labels.length, 1);
+  const barW = Math.max(4, Math.min(24, slotW * 0.32));
+  labels.forEach((label, i) => {
+    const center = pad.l + slotW * i + slotW / 2;
+    drawBar(center - barW - 2, a[i], barW, '#2563eb');
+    drawBar(center + 2, b[i], barW, '#d97706');
+  });
   ctx.fillStyle = '#64748b';
   ctx.font = '11px sans-serif';
   const step = Math.max(1, Math.ceil(labels.length / 10));
   labels.forEach((label, i) => {
     if (i % step !== 0 && i !== labels.length - 1) return;
-    const x = pad.l + (labels.length === 1 ? 0 : plotW * i / (labels.length - 1));
+    const x = pad.l + slotW * i + slotW / 2;
     ctx.fillText(label, x - 8, h - 16);
   });
-  function drawLine(values, color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    values.forEach((val, i) => {
-      const x = pad.l + (values.length === 1 ? 0 : plotW * i / (values.length - 1));
-      const y = pad.t + plotH - (num(val) / max) * plotH;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+  function drawBar(x, val, width, color) {
+    const height = Math.max(0, (num(val) / max) * plotH);
+    const y = pad.t + plotH - height;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, width, height);
   }
 }
 
@@ -1659,6 +1700,9 @@ document.querySelectorAll('.tab').forEach(btn => {
     if (btn.dataset.view === 'tips') loadTipsForDate();
   });
 });
+$('btn-app-login').addEventListener('click', unlockApp);
+$('app-login-user').addEventListener('keydown', e => { if (e.key === 'Enter') $('app-login-pass').focus(); });
+$('app-login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') unlockApp(); });
 turnoverIds.forEach(id => $(id).addEventListener('input', calcTurnover));
 ['tip-total-cash', 'morning-card-tip', 'morning-cash-tip'].forEach(id => $(id).addEventListener('input', calcTips));
 $('current-date').addEventListener('change', loadSelectedDate);
@@ -1681,7 +1725,7 @@ $('detail-save-turnover').addEventListener('click', saveAdminTurnover);
 $('detail-save-tips').addEventListener('click', saveAdminTips);
 $('detail-export-day').addEventListener('click', () => adminDate && exportWorkbook(adminDate, adminDate));
 $('export-today').addEventListener('click', () => exportWorkbook(todayStr(), todayStr()));
-$('export-week').addEventListener('click', () => { const w = getWeekRange(todayStr()); exportWorkbook(w.from, w.to); });
+$('export-week').addEventListener('click', () => { const w = getBusinessWeekToDateRange(todayStr()); exportWorkbook(w.from, w.to); });
 $('export-month').addEventListener('click', () => { const m = monthRange(todayStr()); exportWorkbook(m.from, m.to); });
 $('export-custom').addEventListener('click', () => exportWorkbook($('export-from').value, $('export-to').value));
 document.addEventListener('input', e => {
@@ -1729,9 +1773,7 @@ document.querySelectorAll('.chart-mode').forEach(btn => {
 });
 
 $('current-date').value = selectedDate;
-loadSelectedDate();
-showAdminDashboard(isAdmin());
-initSupabase();
+$('app-login-user').focus();
 </script>
 </body>
 </html>
