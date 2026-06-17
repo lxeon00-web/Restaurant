@@ -529,7 +529,7 @@ canvas {
         <div class="panel-head">
           <div>
             <div class="panel-title">数据总览</div>
-            <div class="hint">本周按周一到周日计算。</div>
+            <div class="hint">本周金额按本周二到今天计算，周一不开门不计入。</div>
           </div>
           <button class="btn outline mini" id="btn-admin-logout">退出管理员模式</button>
         </div>
@@ -544,7 +544,7 @@ canvas {
       <div class="panel">
         <div class="panel-head">
           <div>
-            <div class="panel-title">营业额对比折线图</div>
+            <div class="panel-title">营业额对比柱状图</div>
             <div class="hint">可切换和上周、上月、去年对比。</div>
           </div>
         </div>
@@ -700,7 +700,13 @@ function plain(value) {
   return num(value).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function trunc2(value) { return Math.floor(num(value) * 100) / 100; }
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+function todayStr() { return formatDate(new Date()); }
 function showToast(message) {
   const t = $('toast');
   t.textContent = message;
@@ -989,12 +995,12 @@ function subscribeToCloudChanges() {
 function dateAdd(dateStr, days) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return formatDate(d);
 }
 function monthAdd(dateStr, months) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setMonth(d.getMonth() + months);
-  return d.toISOString().split('T')[0];
+  return formatDate(d);
 }
 function getWeekRange(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -1003,7 +1009,7 @@ function getWeekRange(dateStr) {
   from.setDate(d.getDate() - day + 1);
   const to = new Date(from);
   to.setDate(from.getDate() + 6);
-  return { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0] };
+  return { from: formatDate(from), to: formatDate(to) };
 }
 function getBusinessWeekToDateRange(dateStr) {
   const week = getWeekRange(dateStr);
@@ -1018,7 +1024,7 @@ function monthRange(dateStr) {
   const d = new Date(first + 'T00:00:00');
   d.setMonth(d.getMonth() + 1);
   d.setDate(0);
-  return { from: first, to: d.toISOString().split('T')[0] };
+  return { from: first, to: formatDate(d) };
 }
 
 function calcTurnoverFromData(d) {
