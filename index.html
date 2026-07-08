@@ -71,6 +71,7 @@ body.app-locked .app-login {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 16px;
   background: var(--blue);
@@ -80,6 +81,31 @@ body.app-locked .app-login {
 .title {
   font-size: 18px;
   font-weight: 700;
+}
+.cloud-status {
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 520px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.13);
+  color: white;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: center;
+}
+.cloud-status.ok {
+  background: rgba(5, 150, 105, 0.35);
+  border-color: rgba(187, 247, 208, 0.8);
+}
+.cloud-status.warn {
+  background: rgba(217, 119, 6, 0.38);
+  border-color: rgba(253, 230, 138, 0.9);
+}
+.cloud-status.error {
+  background: rgba(220, 38, 38, 0.38);
+  border-color: rgba(254, 202, 202, 0.9);
 }
 .date-box {
   display: flex;
@@ -354,8 +380,10 @@ canvas {
 @media (max-width: 820px) {
   .grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
   .metric-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-  .topbar { align-items: flex-start; flex-direction: column; }
-  .tabs { top: 93px; }
+  .topbar { align-items: stretch; flex-direction: column; gap: 8px; }
+  .cloud-status { max-width: none; width: 100%; }
+  .date-box { justify-content: space-between; }
+  .tabs { top: 132px; }
 }
 @media (max-width: 520px) {
   .wrap { padding: 8px; }
@@ -382,6 +410,7 @@ canvas {
 </section>
 <header class="topbar">
   <div class="title">餐厅每日算账 V2</div>
+  <div class="cloud-status warn" id="cloud-status-public">云端状态检查中</div>
   <div class="date-box">
     <span>当前日期</span>
     <input type="date" id="current-date">
@@ -513,6 +542,7 @@ canvas {
           <button class="btn primary" id="btn-github-login" style="background:#24292e;">GitHub 登录</button>
           <button class="btn outline mini" id="btn-github-logout" style="display:none;">退出登录</button>
           <button class="btn outline mini" id="btn-cloud-pull">从云端拉取</button>
+          <button class="btn outline mini" id="btn-cloud-push-local">上传本机数据到云端</button>
         </div>
         <div class="grid" style="margin-top:10px;">
           <div class="field"><label>Project URL</label><input id="supabase-url" placeholder="https://xxxxx.supabase.co"></div>
@@ -749,6 +779,23 @@ function unlockApp() {
 function setSyncStatus(message) {
   const el = $('supabase-sync-indicator');
   if (el) el.textContent = message;
+  const top = $('cloud-status-public');
+  if (top) {
+    top.textContent = message;
+    top.classList.remove('ok', 'warn', 'error');
+    if (/失败|未配置|未登录|仅本地|请先|错误/.test(message)) top.classList.add(/失败|错误/.test(message) ? 'error' : 'warn');
+    else top.classList.add('ok');
+  }
+}
+function isCloudConnected() {
+  return !!(supabase && supabaseReady && supabaseAuthed);
+}
+function requireCloudConnected(actionName) {
+  if (isCloudConnected()) return true;
+  const message = '云端未连接，不能' + actionName + '。请管理员进入 Supabase 云同步并 GitHub 登录。';
+  setSyncStatus(message);
+  showToast(message);
+  return false;
 }
 function sanitizeSupabaseUrl(raw) {
   let cleaned = String(raw || '').trim().replace(/\/+$/, '');
@@ -930,22 +977,63 @@ async function supabaseLogout() {
   if ($('supabase-login-status')) $('supabase-login-status').textContent = '已退出登录';
   setSyncStatus('已退出登录，仅本地存储');
 }
-function syncRecordToCloud(date, data) {
-  if (!supabase || !supabaseAuthed) return;
-  const row = { date, data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() }, updated_at: new Date().toISOString() };
-  supabase.from(CLOUD_TABLES.records).upsert(row, { onConflict: 'date' }).then(() => setSyncStatus('营业额已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('营业额同步失败：' + err.message));
+async function syncRecordToCloud(date, data, options = {}) {
+  if (!isCloudConnected()) {
+    if (!options.quiet) setSyncStatus('Supabase 未登录，营业额没有上传');
+    return false;
+  }
+  try {
+    const now = new Date().toISOString();
+    const row = { date, data: { ...data, date, updatedAt: data.updatedAt || now }, updated_at: now };
+    const { error } = await supabase.from(CLOUD_TABLES.records).upsert(row, { onConflict: 'date' });
+    if (error) throw error;
+    if (!options.quiet) setSyncStatus('营业额已同步 ' + new Date().toLocaleTimeString());
+    return true;
+  } catch (err) {
+    setSyncStatus('营业额同步失败：' + (err.message || '未知错误'));
+    if (!options.quiet) showToast('营业额同步失败，请检查 Supabase 登录');
+    return false;
+  }
 }
-function syncTipToCloud(date, data) {
-  if (!supabase || !supabaseAuthed) return;
-  const row = { date, data: { ...data, updatedAt: data.updatedAt || new Date().toISOString() }, updated_at: new Date().toISOString() };
-  supabase.from(CLOUD_TABLES.tips).upsert(row, { onConflict: 'date' }).then(() => setSyncStatus('小费已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('小费同步失败：' + err.message));
+async function syncTipToCloud(date, data, options = {}) {
+  if (!isCloudConnected()) {
+    if (!options.quiet) setSyncStatus('Supabase 未登录，小费没有上传');
+    return false;
+  }
+  try {
+    const now = new Date().toISOString();
+    const row = { date, data: { ...data, date, updatedAt: data.updatedAt || now }, updated_at: now };
+    const { error } = await supabase.from(CLOUD_TABLES.tips).upsert(row, { onConflict: 'date' });
+    if (error) throw error;
+    if (!options.quiet) setSyncStatus('小费已同步 ' + new Date().toLocaleTimeString());
+    return true;
+  } catch (err) {
+    setSyncStatus('小费同步失败：' + (err.message || '未知错误'));
+    if (!options.quiet) showToast('小费同步失败，请检查 Supabase 登录');
+    return false;
+  }
 }
-function syncStaffToCloud() {
-  if (!supabase || !supabaseAuthed) return;
-  supabase.from(CLOUD_TABLES.staff).upsert({ id: 1, names: getStaffList(), updated_at: new Date().toISOString() }).then(() => setSyncStatus('员工名单已同步 ' + new Date().toLocaleTimeString())).catch(err => setSyncStatus('员工同步失败：' + err.message));
+async function syncStaffToCloud(options = {}) {
+  if (!isCloudConnected()) {
+    if (!options.quiet) setSyncStatus('Supabase 未登录，员工名单没有上传');
+    return false;
+  }
+  try {
+    const { error } = await supabase.from(CLOUD_TABLES.staff).upsert({ id: 1, names: getStaffList(), updated_at: new Date().toISOString() });
+    if (error) throw error;
+    if (!options.quiet) setSyncStatus('员工名单已同步 ' + new Date().toLocaleTimeString());
+    return true;
+  } catch (err) {
+    setSyncStatus('员工同步失败：' + (err.message || '未知错误'));
+    if (!options.quiet) showToast('员工名单同步失败，请检查 Supabase 登录');
+    return false;
+  }
 }
 async function loadFromCloud() {
-  if (!supabase || !supabaseAuthed) return;
+  if (!isCloudConnected()) {
+    setSyncStatus('Supabase 未登录，不能从云端拉取');
+    return false;
+  }
   try {
     const records = load(KEYS.records);
     const tips = load(KEYS.tips);
@@ -972,8 +1060,68 @@ async function loadFromCloud() {
     loadSelectedDate();
     refreshAdmin();
     setSyncStatus('已从云端拉取数据 ' + new Date().toLocaleTimeString());
+    return true;
   } catch (err) {
     setSyncStatus('云端拉取失败：' + (err.message || '未知错误'));
+    return false;
+  }
+}
+async function pushLocalToCloud() {
+  if (!requireCloudConnected('上传本机数据')) return;
+  if (!window.confirm('会把本机浏览器里已有的营业额和小费补上传到 Supabase。云端较新的日期会跳过，不会覆盖。确定继续吗？')) return;
+  try {
+    setSyncStatus('正在检查本机和云端数据...');
+    const localRecords = load(KEYS.records);
+    const localTips = load(KEYS.tips);
+    const { data: cloudRecordRows, error: recordError } = await supabase.from(CLOUD_TABLES.records).select('date,data,updated_at');
+    if (recordError) throw recordError;
+    const { data: cloudTipRows, error: tipError } = await supabase.from(CLOUD_TABLES.tips).select('date,data,updated_at');
+    if (tipError) throw tipError;
+    const cloudRecordDates = {};
+    const cloudTipDates = {};
+    (cloudRecordRows || []).forEach(row => {
+      const key = normalizeDateKey(row.date);
+      cloudRecordDates[key] = new Date(row.data?.updatedAt || row.updated_at || 0);
+    });
+    (cloudTipRows || []).forEach(row => {
+      const key = normalizeDateKey(row.date);
+      cloudTipDates[key] = new Date(row.data?.updatedAt || row.updated_at || 0);
+    });
+    let recordUploaded = 0;
+    let recordSkipped = 0;
+    let tipUploaded = 0;
+    let tipSkipped = 0;
+    for (const rawDate of Object.keys(localRecords).sort()) {
+      const date = normalizeDateKey(rawDate);
+      const item = { ...localRecords[rawDate], date };
+      const localUpdated = new Date(item.updatedAt || item.createdAt || 0);
+      const cloudUpdated = cloudRecordDates[date];
+      if (!cloudUpdated || localUpdated >= cloudUpdated) {
+        const ok = await syncRecordToCloud(date, item, { quiet: true });
+        if (ok) recordUploaded += 1;
+      } else {
+        recordSkipped += 1;
+      }
+    }
+    for (const rawDate of Object.keys(localTips).sort()) {
+      const date = normalizeDateKey(rawDate);
+      const item = { ...localTips[rawDate], date };
+      const localUpdated = new Date(item.updatedAt || 0);
+      const cloudUpdated = cloudTipDates[date];
+      if (!cloudUpdated || localUpdated >= cloudUpdated) {
+        const ok = await syncTipToCloud(date, item, { quiet: true });
+        if (ok) tipUploaded += 1;
+      } else {
+        tipSkipped += 1;
+      }
+    }
+    await syncStaffToCloud({ quiet: true });
+    const message = '本机补传完成：营业额 ' + recordUploaded + ' 条，小费 ' + tipUploaded + ' 条；跳过云端较新数据 ' + (recordSkipped + tipSkipped) + ' 条';
+    setSyncStatus(message);
+    showToast(message);
+  } catch (err) {
+    setSyncStatus('本机补传失败：' + (err.message || '未知错误'));
+    showToast('本机补传失败，请检查 Supabase 登录和网络');
   }
 }
 function subscribeToCloudChanges() {
@@ -1118,19 +1266,21 @@ function loadSelectedDate() {
   loadTipsForDate();
   if (isAdmin()) refreshAdmin();
 }
-function submitTurnover() {
+async function submitTurnover() {
   const records = load(KEYS.records);
   if (records[selectedDate]) {
     showToast('这一天已提交，只有管理员可修改');
     return;
   }
+  if (!requireCloudConnected('提交营业额')) return;
   const data = getTurnoverFormData();
   data.createdAt = new Date().toISOString();
   data.updatedAt = data.createdAt;
+  const ok = await syncRecordToCloud(selectedDate, data);
+  if (!ok) return;
   records[selectedDate] = data;
   save(KEYS.records, records);
-  syncRecordToCloud(selectedDate, data);
-  showToast('营业额已提交');
+  showToast('营业额已提交并同步云端');
   setTurnoverLocked(true);
   loadTipsForDate();
   refreshAdmin();
@@ -1326,19 +1476,21 @@ function setTipsLocked(locked) {
   $('tips-state').textContent = locked ? '小费已提交，员工模式已锁定' : (currentTurnoverTips() ? 'Total card tips 已锁定' : '请先提交每日营业额');
   $('tips-status').textContent = locked ? '这一天的小费计算已经提交。只有管理员可在后台查看和修改。' : '';
 }
-function saveTips() {
+async function saveTips() {
   if (!load(KEYS.records)[selectedDate]) {
     showToast('请先提交这一天的每日营业额');
     return;
   }
+  if (!requireCloudConnected('提交小费计算')) return;
   const data = getTipFormData();
   if (!validateTipStaff(data)) return;
   data.updatedAt = new Date().toISOString();
+  const ok = await syncTipToCloud(selectedDate, data);
+  if (!ok) return;
   const tips = load(KEYS.tips);
   tips[selectedDate] = data;
   save(KEYS.tips, tips);
-  syncTipToCloud(selectedDate, data);
-  showToast('小费计算已保存');
+  showToast('小费计算已保存并同步云端');
   $('tips-status').textContent = '已保存 ' + selectedDate;
   setTipsLocked(true);
   refreshAdmin();
@@ -1457,24 +1609,26 @@ function openDetail(date) {
 function adminFields(fields, data, prefix) {
   return fields.map(([key, label]) => '<div class="field"><label>' + label + '</label><input type="number" step="0.01" data-admin-' + prefix + '="' + key + '" value="' + (data?.[key] ?? '') + '"></div>').join('');
 }
-function saveAdminTurnover() {
+async function saveAdminTurnover() {
   if (!adminDate) return;
+  if (!requireCloudConnected('保存营业额修改')) return;
   const records = load(KEYS.records);
-  const old = records[adminDate] || { date: adminDate };
+  const old = { ...(records[adminDate] || { date: adminDate }) };
   document.querySelectorAll('[data-admin-turnover]').forEach(input => {
     old[input.dataset.adminTurnover] = num(input.value);
   });
   const updated = { ...old, date: adminDate, ...calcTurnoverFromData(old), updatedAt: new Date().toISOString() };
+  const ok = await syncRecordToCloud(adminDate, updated);
+  if (!ok) return;
   records[adminDate] = updated;
   save(KEYS.records, records);
-  syncRecordToCloud(adminDate, updated);
-  recomputeSavedTipForDate(adminDate);
+  await recomputeSavedTipForDate(adminDate);
   if (adminDate === selectedDate) loadSelectedDate();
   refreshAdmin();
   openDetail(adminDate);
-  showToast('营业额修改已保存');
+  showToast('营业额修改已保存并同步云端');
 }
-function recomputeSavedTipForDate(date) {
+async function recomputeSavedTipForDate(date) {
   const records = load(KEYS.records);
   const tips = load(KEYS.tips);
   if (!records[date] || !tips[date]) return;
@@ -1492,23 +1646,25 @@ function recomputeSavedTipForDate(date) {
     updatedAt: new Date().toISOString()
   };
   save(KEYS.tips, tips);
-  syncTipToCloud(date, tips[date]);
+  await syncTipToCloud(date, tips[date]);
 }
-function saveAdminTips() {
+async function saveAdminTips() {
   if (!adminDate) return;
+  if (!requireCloudConnected('保存小费修改')) return;
   const records = load(KEYS.records);
   if (!records[adminDate]) return;
   const tips = load(KEYS.tips);
   const data = getAdminTipEditorData();
   if (!validateTipStaff(data)) return;
   data.updatedAt = new Date().toISOString();
+  const ok = await syncTipToCloud(adminDate, data);
+  if (!ok) return;
   tips[adminDate] = data;
   save(KEYS.tips, tips);
-  syncTipToCloud(adminDate, tips[adminDate]);
   if (adminDate === selectedDate) loadTipsForDate();
   refreshAdmin();
   openDetail(adminDate);
-  showToast('小费修改已保存');
+  showToast('小费修改已保存并同步云端');
 }
 
 function renderStaffTable() {
@@ -1766,6 +1922,7 @@ $('btn-save-supabase').addEventListener('click', saveSupabaseConfig);
 $('btn-github-login').addEventListener('click', supabaseLogin);
 $('btn-github-logout').addEventListener('click', supabaseLogout);
 $('btn-cloud-pull').addEventListener('click', loadFromCloud);
+$('btn-cloud-push-local').addEventListener('click', pushLocalToCloud);
 $('add-morning-staff').addEventListener('click', () => { morningRows = collectRows('morning'); morningRows.push({ name: '', hours: 0 }); renderStaffRows('morning'); calcTips(); });
 $('add-evening-staff').addEventListener('click', () => { eveningRows = collectRows('evening'); eveningRows.push({ name: '', hours: 0 }); renderStaffRows('evening'); calcTips(); });
 $('admin-add-morning-staff').addEventListener('click', () => { adminMorningRows = collectAdminRows('morning'); adminMorningRows.push({ name: '', hours: 0 }); renderAdminStaffRows('morning'); calcAdminTips(); });
