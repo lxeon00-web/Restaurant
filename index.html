@@ -442,15 +442,15 @@ canvas {
       </div>
 
       <div class="grid">
-        <div class="field"><label>Card tips</label><input id="card-tips" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Card tips</label><input id="card-tips" type="number" step="0.01" inputmode="decimal" required></div>
         <div class="field"><label>Extra tips</label><input id="extra-tips" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label>Total card tips</label><input id="total-card-tips" readonly></div>
-        <div class="field"><label>Total 今日总营业额</label><input id="total-turnover" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Total 今日总营业额</label><input id="total-turnover" type="number" step="0.01" inputmode="decimal" required></div>
 
         <div class="field"><label>Z Report = Total - Card tips</label><input id="z-report" readonly></div>
-        <div class="field"><label>卡机今日收入</label><input id="card-machine" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label>Card machine 卡机今日收入</label><input id="card-machine" type="number" step="0.01" inputmode="decimal" required></div>
         <div class="field"><label>Card 金额 = 卡机收入 - Total card tips</label><input id="card-amount" readonly></div>
-        <div class="field"><label>Cash 金额（抽屉 till 总数 - 80）</label><input id="cash-amount" type="number" step="0.01" inputmode="decimal" value="0"></div>
+        <div class="field"><label>Cash 金额（抽屉 till 总数 - 80）</label><input id="cash-amount" type="number" step="0.01" inputmode="decimal" value="0" required></div>
 
         <div class="field"><label>Online 金额</label><input id="online-amount" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label>Receipt 金额</label><input id="receipt-amount" type="number" step="0.01" inputmode="decimal"></div>
@@ -1256,6 +1256,21 @@ function calcTurnover() {
   diffEl.style.background = Math.abs(data.diff) < 0.005 ? 'var(--green-50)' : 'var(--red-50)';
   diffEl.style.borderColor = Math.abs(data.diff) < 0.005 ? '#86efac' : '#fecaca';
 }
+function validateTurnoverRequiredFields() {
+  const required = [
+    ['card-tips', 'Card tips'],
+    ['total-turnover', 'Total 今日总营业额'],
+    ['card-machine', 'Card machine 卡机今日收入'],
+    ['cash-amount', 'Cash 金额']
+  ];
+  const missing = required.filter(([id]) => $(id).value.trim() === '');
+  if (!missing.length) return true;
+  const message = '请先填写必填项：' + missing.map(([, label]) => label).join('、');
+  $('turnover-status').textContent = message;
+  showToast(message);
+  $(missing[0][0]).focus();
+  return false;
+}
 function setTurnoverLocked(locked) {
   const panel = $('turnover-lock-panel');
   turnoverIds.forEach(id => $(id).disabled = locked);
@@ -1279,6 +1294,7 @@ async function submitTurnover() {
     showToast('这一天已提交，只有管理员可修改');
     return;
   }
+  if (!validateTurnoverRequiredFields()) return;
   if (!requireCloudConnected('提交营业额')) return;
   const data = getTurnoverFormData();
   data.createdAt = new Date().toISOString();
@@ -1598,7 +1614,7 @@ function openDetail(date) {
   $('detail-title').textContent = date + ' 历史详情';
   $('admin-turnover-grid').innerHTML = adminFields([
     ['cardTips', 'Card tips'], ['extraTips', 'Extra tips'], ['totalTurnover', 'Total 今日总营业额'],
-    ['cardMachineIncome', '卡机今日收入'], ['cashAmount', 'Cash（抽屉 till 总数 - 80）'], ['onlineAmount', 'Online'],
+    ['cardMachineIncome', 'Card machine 卡机今日收入'], ['cashAmount', 'Cash（抽屉 till 总数 - 80）'], ['onlineAmount', 'Online'],
     ['receiptAmount', 'Receipt'], ['depositAmount', 'Deposit'], ['phoneDepositAmount', 'Phone Deposit（输入正数，自动扣减）'],
     ['deliverooAmount', 'Deliveroo']
   ], r, 'turnover');
