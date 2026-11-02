@@ -702,6 +702,8 @@ const ADMIN_PASSWORD = '221830';
 const APP_LOGIN_USER = 'uchi';
 const APP_LOGIN_PASSWORD = '6262';
 const SUPABASE_CONFIG_KEY = 'resto_v2_supabase_config';
+const TIP_SPLIT_CHANGE_DATE = '2026-10-01';
+const TEAM_TIP_NAME = 'Team团队';
 const CLOUD_TABLES = {
   records: 'turnover_records_v2',
   tips: 'tip_records_v2',
@@ -735,7 +737,15 @@ function $(id) { return document.getElementById(id); }
 function load(key) {
   try {
     const fallback = key === KEYS.staff ? [] : {};
-    return JSON.parse(localStorage.getItem(key)) || fallback;
+    const value = JSON.parse(localStorage.getItem(key)) || fallback;
+    if (key === KEYS.tips) {
+      const records = load(KEYS.records);
+      // Recalculate allocations by bill date without rewriting the saved inputs.
+      Object.keys(value).forEach(date => {
+        value[date] = applyTipSplitPolicy(date, value[date], records[date]?.totalCardTips);
+      });
+    }
+    return value;
   } catch {
     return key === KEYS.staff ? [] : {};
   }
@@ -1365,25 +1375,62 @@ function renderAdminStaffRows(period) {
     '</div>';
   }).join('');
 }
+function tipSplitForDate(date) {
+  return normalizeDateKey(date) >= TIP_SPLIT_CHANGE_DATE
+    ? { version: TIP_SPLIT_CHANGE_DATE, kitchenPercent: 35, floorPercent: 45, teamPercent: 20 }
+    : { version: 'legacy', kitchenPercent: 50, floorPercent: 50, teamPercent: 0 };
+}
+function splitTipPool(amount, policy) {
+  if (policy.version === 'legacy') {
+    const kitchen = trunc2(amount * 0.5);
+    return { kitchen, floor: amount - kitchen, team: 0 };
+  }
+  const pence = Math.round(num(amount) * 100);
+  const shares = [policy.kitchenPercent, policy.floorPercent, policy.teamPercent].map((percent, index) => ({
+    index, pence: Math.floor(pence * percent / 100), remainder: pence * percent % 100
+  }));
+  const remaining = pence - shares.reduce((sum, share) => sum + share.pence, 0);
+  // Award remaining pennies to the largest fractional shares.
+  const ranked = shares.slice().sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (let idx = 0; idx < remaining; idx++) ranked[idx].pence += 1;
+  return { kitchen: shares[0].pence / 100, floor: shares[1].pence / 100, team: shares[2].pence / 100 };
+}
 function calcTipsFromData(t, totalCardTips) {
+  const tipSplit = tipSplitForDate(t.date);
   const totalCard = num(totalCardTips);
   const totalCash = num(t.totalDailyCashTip);
   const morningCard = num(t.morningCardTip);
   const morningCash = num(t.morningCashTip);
   const eveningCard = Math.max(0, totalCard - morningCard);
   const eveningCash = Math.max(0, totalCash - morningCash);
-  const mKitchenCard = trunc2(morningCard * 0.5);
-  const mKitchenCash = trunc2(morningCash * 0.5);
-  const eKitchenCard = trunc2(eveningCard * 0.5);
-  const eKitchenCash = trunc2(eveningCash * 0.5);
+  const mCard = splitTipPool(morningCard, tipSplit);
+  const mCash = splitTipPool(morningCash, tipSplit);
+  const eCard = splitTipPool(eveningCard, tipSplit);
+  const eCash = splitTipPool(eveningCash, tipSplit);
   return {
+    tipSplit,
     totalCard, totalCash, morningCard, morningCash, eveningCard, eveningCash,
-    mKitchenCard, mKitchenCash,
-    mFloorCard: morningCard - mKitchenCard,
-    mFloorCash: morningCash - mKitchenCash,
-    eKitchenCard, eKitchenCash,
-    eFloorCard: eveningCard - eKitchenCard,
-    eFloorCash: eveningCash - eKitchenCash
+    mKitchenCard: mCard.kitchen, mKitchenCash: mCash.kitchen,
+    mFloorCard: mCard.floor, mFloorCash: mCash.floor,
+    eKitchenCard: eCard.kitchen, eKitchenCash: eCash.kitchen,
+    eFloorCard: eCard.floor, eFloorCash: eCash.floor,
+    mTeamCard: mCard.team, mTeamCash: mCash.team,
+    eTeamCard: eCard.team, eTeamCash: eCash.team,
+    totalTeamCard: (Math.round(mCard.team * 100) + Math.round(eCard.team * 100)) / 100,
+    totalTeamCash: (Math.round(mCash.team * 100) + Math.round(eCash.team * 100)) / 100
+  };
+}
+function applyTipSplitPolicy(date, tip, totalCardTips) {
+  if (!tip || normalizeDateKey(date) < TIP_SPLIT_CHANGE_DATE) return tip;
+  const base = { ...tip, date: normalizeDateKey(date) };
+  const cardTips = totalCardTips ?? tip.totalDailyCardTip ?? tip.totalCard ?? 0;
+  const pools = calcTipsFromData(base, cardTips);
+  return {
+    ...base,
+    totalDailyCardTip: num(cardTips),
+    ...pools,
+    morningStaff: distribute(tip.morningStaff || [], pools.mFloorCard, pools.mFloorCash, date),
+    eveningStaff: distribute(tip.eveningStaff || [], pools.eFloorCard, pools.eFloorCash, date)
   };
 }
 function collectRows(period) {
@@ -1398,7 +1445,8 @@ function collectAdminRows(period) {
     return { name: select.value, hours: num(hours?.value) };
   });
 }
-function distribute(rows, cardPool, cashPool) {
+function distribute(rows, cardPool, cashPool, date) {
+  if (normalizeDateKey(date) >= TIP_SPLIT_CHANGE_DATE) return distributeInPence(rows, cardPool, cashPool);
   const totalHours = rows.reduce((sum, row) => sum + num(row.hours), 0);
   const cleaned = rows.map(row => ({ ...row, cardAmount: 0, cashAmount: 0 }));
   if (cleaned.length === 1 && totalHours === 0) {
@@ -1418,6 +1466,23 @@ function distribute(rows, cardPool, cashPool) {
   });
   return cleaned;
 }
+function distributeInPence(rows, cardPool, cashPool) {
+  const totalHours = rows.reduce((sum, row) => sum + num(row.hours), 0);
+  const cardPence = Math.round(num(cardPool) * 100);
+  const cashPence = Math.round(num(cashPool) * 100);
+  let cardAssigned = 0;
+  let cashAssigned = 0;
+  return rows.map((row, idx) => {
+    const takeRemainder = idx === rows.length - 1 && (totalHours > 0 || rows.length === 1);
+    const card = takeRemainder ? cardPence - cardAssigned
+      : totalHours > 0 ? Math.floor(cardPence * num(row.hours) / totalHours) : 0;
+    const cash = takeRemainder ? cashPence - cashAssigned
+      : totalHours > 0 ? Math.floor(cashPence * num(row.hours) / totalHours) : 0;
+    cardAssigned += card;
+    cashAssigned += cash;
+    return { ...row, cardAmount: card / 100, cashAmount: cash / 100 };
+  });
+}
 function getTipFormData() {
   const records = load(KEYS.records);
   const totalCardTips = records[selectedDate]?.totalCardTips || 0;
@@ -1429,8 +1494,8 @@ function getTipFormData() {
     morningCashTip: num($('morning-cash-tip').value)
   };
   const pools = calcTipsFromData(base, totalCardTips);
-  const morning = distribute(collectRows('morning'), pools.mFloorCard, pools.mFloorCash);
-  const evening = distribute(collectRows('evening'), pools.eFloorCard, pools.eFloorCash);
+  const morning = distribute(collectRows('morning'), pools.mFloorCard, pools.mFloorCash, selectedDate);
+  const evening = distribute(collectRows('evening'), pools.eFloorCard, pools.eFloorCash, selectedDate);
   return { ...base, ...pools, morningStaff: morning, eveningStaff: evening };
 }
 function getAdminTipEditorData() {
@@ -1444,8 +1509,8 @@ function getAdminTipEditorData() {
     morningCashTip: num(document.querySelector('[data-admin-tip="morningCashTip"]')?.value)
   };
   const pools = calcTipsFromData(base, totalCardTips);
-  const morning = distribute(collectAdminRows('morning'), pools.mFloorCard, pools.mFloorCash);
-  const evening = distribute(collectAdminRows('evening'), pools.eFloorCard, pools.eFloorCash);
+  const morning = distribute(collectAdminRows('morning'), pools.mFloorCard, pools.mFloorCash, adminDate);
+  const evening = distribute(collectAdminRows('evening'), pools.eFloorCard, pools.eFloorCash, adminDate);
   return { ...base, ...pools, morningStaff: morning, eveningStaff: evening };
 }
 function calcTips() {
@@ -1658,14 +1723,15 @@ async function recomputeSavedTipForDate(date) {
   const existing = tips[date];
   const base = {
     ...existing,
+    date,
     totalDailyCardTip: records[date].totalCardTips
   };
   const pools = calcTipsFromData(base, records[date].totalCardTips);
   tips[date] = {
     ...base,
     ...pools,
-    morningStaff: distribute(normalizeStaffRows(existing.morningStaff), pools.mFloorCard, pools.mFloorCash),
-    eveningStaff: distribute(normalizeStaffRows(existing.eveningStaff), pools.eFloorCard, pools.eFloorCash),
+    morningStaff: distribute(normalizeStaffRows(existing.morningStaff), pools.mFloorCard, pools.mFloorCash, date),
+    eveningStaff: distribute(normalizeStaffRows(existing.eveningStaff), pools.eFloorCard, pools.eFloorCash, date),
     updatedAt: new Date().toISOString()
   };
   save(KEYS.tips, tips);
@@ -1726,6 +1792,7 @@ function deleteStaff(idx) {
 }
 
 function exportWorkbook(from, to) {
+  if (!isAdmin()) return showToast('请先进入管理员后台');
   const records = load(KEYS.records);
   const tips = load(KEYS.tips);
   const dates = Object.keys(records).filter(d => d >= from && d <= to).sort();
@@ -1753,6 +1820,7 @@ function exportWorkbook(from, to) {
   const people = collectTipPeople(dates, tips);
   appendTipSheet(wb, dates, tips, people, 'card', 'Card小费明细');
   appendTipSheet(wb, dates, tips, people, 'cash', 'Cash小费明细');
+  appendTeamTipSheet(wb, dates, tips);
 
   const sumRows = [['项目', '金额']];
   const totals = dates.reduce((acc, date) => {
@@ -1786,8 +1854,9 @@ function collectTipPeople(dates, tips) {
   return ['厨房'].concat(Array.from(set).filter(n => n !== '厨房').sort());
 }
 function appendTipSheet(wb, dates, tips, people, kind, sheetName) {
-  const rows = [['日期'].concat(people.map(p => p + ' (' + (kind === 'card' ? 'Card' : 'Cash') + ')'), [kind === 'card' ? 'Card合计' : 'Cash合计']).flat()];
+  const rows = [['日期'].concat(people.map(p => p + ' (' + (kind === 'card' ? 'Card' : 'Cash') + ')'), [TEAM_TIP_NAME + ' (' + (kind === 'card' ? 'Card' : 'Cash') + ')', kind === 'card' ? 'Card合计' : 'Cash合计']).flat()];
   const totals = Object.fromEntries(people.map(p => [p, 0]));
+  let teamTotal = 0;
   dates.forEach(date => {
     const t = tips[date];
     if (!t) return;
@@ -1797,22 +1866,40 @@ function appendTipSheet(wb, dates, tips, people, kind, sheetName) {
       if (!s.name) return;
       values[s.name] = (values[s.name] || 0) + (kind === 'card' ? num(s.cardAmount) : num(s.cashAmount));
     });
-    let rowTotal = 0;
+    const teamValue = kind === 'card' ? num(t.totalTeamCard) : num(t.totalTeamCash);
+    teamTotal += teamValue;
+    let rowTotal = teamValue;
     const row = [date].concat(people.map(p => {
       rowTotal += values[p] || 0;
       totals[p] += values[p] || 0;
       return values[p] || 0;
-    }), [rowTotal]);
+    }), [teamValue, rowTotal]);
     rows.push(row.flat());
   });
-  let grand = 0;
+  let grand = teamTotal;
   rows.push(['合计'].concat(people.map(p => {
     grand += totals[p] || 0;
     return totals[p] || 0;
-  }), [grand]).flat());
+  }), [teamTotal, grand]).flat());
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = rows[0].map(() => ({ wch: 16 }));
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
+function appendTeamTipSheet(wb, dates, tips) {
+  const rows = [['日期', '上午 Card', '上午 Cash', '下午 Card', '下午 Cash', '全天 Card', '全天 Cash', 'Team团队合计']];
+  const totals = Array(7).fill(0);
+  dates.forEach(date => {
+    const t = tips[date];
+    if (!t) return;
+    const values = [t.mTeamCard, t.mTeamCash, t.eTeamCard, t.eTeamCash, t.totalTeamCard, t.totalTeamCash].map(num);
+    values.push((Math.round(values[4] * 100) + Math.round(values[5] * 100)) / 100);
+    values.forEach((value, idx) => { totals[idx] += Math.round(value * 100); });
+    rows.push([date, ...values]);
+  });
+  rows.push(['合计', ...totals.map(value => value / 100)]);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = rows[0].map(() => ({ wch: 18 }));
+  XLSX.utils.book_append_sheet(wb, ws, TEAM_TIP_NAME);
 }
 
 function drawChart(mode) {
